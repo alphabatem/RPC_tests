@@ -70,7 +70,7 @@ func RunMethodTest(methodName string) {
 	fmt.Printf("Starting %s test with %d concurrent requests for %d seconds\n",
 		methodName, concurrency, duration)
 	fmt.Printf("RPC URL: %s\n", rpcURL)
-	fmt.Printf("Accounts: %v\n", accounts)
+	fmt.Printf("Number of accounts: %d\n", len(accounts))
 
 	startTime := time.Now()
 	endTime := startTime.Add(time.Duration(duration) * time.Second)
@@ -127,6 +127,39 @@ func RunMethodTest(methodName string) {
 		}(i)
 	}
 
+	// Add progress reporting
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	go func() {
+		fmt.Println("\nProgress:")
+		for {
+			select {
+			case <-ticker.C:
+				if time.Now().After(endTime) {
+					return
+				}
+
+				mutex.Lock()
+				elapsed := time.Since(startTime)
+				currentTotal := successCount + failureCount
+				currentRPS := float64(currentTotal) / elapsed.Seconds()
+				percentComplete := (elapsed.Seconds() / float64(duration)) * 100
+
+				// Create a simple progress bar
+				const barWidth = 30
+				progress := int(percentComplete * float64(barWidth) / 100)
+				progressBar := strings.Repeat("█", progress) + strings.Repeat("░", barWidth-progress)
+
+				fmt.Printf("\r[%s] %.1f%% | %ds/%ds | Requests: %d | RPS: %.1f",
+					progressBar, percentComplete, int(elapsed.Seconds()), duration, currentTotal, currentRPS)
+				mutex.Unlock()
+			case <-stop:
+				return
+			}
+		}
+	}()
+
 	// Wait for the test duration
 	time.Sleep(time.Duration(duration) * time.Second)
 	close(stop)
@@ -134,23 +167,29 @@ func RunMethodTest(methodName string) {
 	// Wait for all workers to finish
 	wg.Wait()
 
+
 	// Calculate and display results
 	totalDuration := time.Since(startTime)
 	totalRequests := successCount + failureCount
 	requestsPerSecond := float64(totalRequests) / totalDuration.Seconds()
 	successRate := float64(successCount) / float64(totalRequests) * 100
 
-	fmt.Println("\nTest Results:")
-	fmt.Printf("Total Duration: %.2f seconds\n", totalDuration.Seconds())
-	fmt.Printf("Total Requests: %d\n", totalRequests)
-	fmt.Printf("Successful Requests: %d (%.2f%%)\n", successCount, successRate)
-	fmt.Printf("Failed Requests: %d (%.2f%%)\n", failureCount, 100-successRate)
-	fmt.Printf("Requests per second: %.2f\n", requestsPerSecond)
+	// Improved results formatting with clearer visual separation
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println("📊 TEST RESULTS SUMMARY")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Printf("🕒 Duration:         %.2f seconds\n", totalDuration.Seconds())
+	fmt.Printf("🔢 Total Requests:    %d\n", totalRequests)
+	fmt.Printf("✅ Successful:        %d (%.2f%%)\n", successCount, successRate)
+	fmt.Printf("❌ Failed:            %d (%.2f%%)\n", failureCount, 100-successRate)
+	fmt.Printf("⚡ Requests/second:   %.2f\n", requestsPerSecond)
 
 	// Add latency statistics
 	if successCount > 0 {
 		avgLatency := totalLatency / time.Duration(successCount)
-		fmt.Printf("\nLatency Statistics:\n")
+		fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println("⏱️  LATENCY STATISTICS")
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 		fmt.Printf("Min: %.2f ms\n", float64(minLatency.Microseconds())/1000)
 		fmt.Printf("Max: %.2f ms\n", float64(maxLatency.Microseconds())/1000)
 		fmt.Printf("Avg: %.2f ms\n", float64(avgLatency.Microseconds())/1000)
