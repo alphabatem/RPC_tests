@@ -9,16 +9,11 @@ import (
 )
 
 // GetMultipleAccounts fetches information for multiple accounts at once
-func (r *RPCTest) GetMultipleAccounts(accountsStr string) error {
-	// Split accounts string if it contains multiple comma-separated accounts
-	accountAddresses := []string{accountsStr}
-	if strings.Contains(accountsStr, ",") {
-		accountAddresses = strings.Split(accountsStr, ",")
-	}
+func (r *RPCTest) GetMultipleAccounts(accountsStr ...string) error {
 
 	// Parse the account addresses
-	pubKeys := make([]solana.PublicKey, 0, len(accountAddresses))
-	for _, addrStr := range accountAddresses {
+	pubKeys := make([]solana.PublicKey, 0, len(accountsStr))
+	for _, addrStr := range accountsStr {
 		addrStr = strings.TrimSpace(addrStr)
 		if addrStr == "" {
 			continue
@@ -40,6 +35,7 @@ func (r *RPCTest) GetMultipleAccounts(accountsStr string) error {
 		context.Background(),
 		pubKeys...,
 	)
+	
 	if err != nil {
 		return fmt.Errorf("failed to get multiple accounts: %v", err)
 	}

@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"strings"
 	"sync"
@@ -22,14 +23,14 @@ var (
 	apiKey       string
 )
 
-func Method(name string, rpcTest *methods.RPCTest, account string) error {
+func Method(name string, rpcTest *methods.RPCTest, account ...string) error {
 	switch name {
 	case "getAccountInfo":
-		return rpcTest.GetAccountInfo(account)
+		return rpcTest.GetAccountInfo(account[0])
 	case "getMultipleAccounts":
-		return rpcTest.GetMultipleAccounts(account)
+		return rpcTest.GetMultipleAccounts(account...)
 	case "getProgramAccounts":
-		return rpcTest.GetProgramAccounts(account)
+		return rpcTest.GetProgramAccounts(account[0])
 	default:
 		return fmt.Errorf("invalid method: %s", name)
 	}
@@ -106,7 +107,21 @@ func RunMethodTest(methodName string) {
 
 					// Execute the specified method
 					startReq := time.Now()
-					err := Method(methodName, rpcTest, accounts[workerID%len(accounts)])
+					var err error
+					if methodName == "getMultipleAccounts" {
+						numAccounts := rand.Intn(10) + 5
+						if len(accounts) < numAccounts {
+							numAccounts = len(accounts)
+						}
+						var batchAccounts []string
+						for i := 0; i < numAccounts; i++ {
+							accountIndex := (workerID + i) % len(accounts)
+							batchAccounts = append(batchAccounts, accounts[accountIndex])
+						}
+						err = Method(methodName, rpcTest, batchAccounts...)
+					} else {
+						err = Method(methodName, rpcTest, accounts[workerID%len(accounts)])
+					}
 					reqDuration := time.Since(startReq)
 
 					mutex.Lock()

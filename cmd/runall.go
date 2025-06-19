@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,17 +18,9 @@ import (
 
 // TestConfig represents the configuration for the test
 type TestConfig struct {
-	MaximumRAM    int                    `json:"maximum_ram"`
-	MaximumDisk   int                    `json:"maximum_disk"`
-	Location      string                 `json:"location"`
-	Mode          string                 `json:"mode"`
-	CacheRequests bool                   `json:"cache_requests"`
-	Monitoring    bool                   `json:"monitoring"`
-	MonitoringURL string                 `json:"monitoring_url"`
-	LogLevel      string                 `json:"log_level"`
-	RPCURL        string                 `json:"rpc_url"`
-	RPCAPIKey     string                 `json:"rpc_apikey"`
-	Programs      map[string]ProgramInfo `json:"programs"`
+	RemoteRPCURL string   `json:"rpc_url"`
+	RPCAPIKey    string   `json:"rpc_apikey"`
+	Programs     []string `json:"programs"`
 }
 
 // ProgramInfo represents program-specific configuration
@@ -63,22 +56,134 @@ type OverallResult struct {
 
 // Default configuration as specified
 var defaultConfig = TestConfig{
-	MaximumRAM:    8,
-	MaximumDisk:   10,
-	Location:      "./data/",
-	Mode:          "normal",
-	CacheRequests: false,
-	Monitoring:    false,
-	MonitoringURL: "",
-	LogLevel:      "INFO",
-	RPCURL:        "https://us.rpc.fluxbeam.xyz",
-	RPCAPIKey:     "YOUR_API_KEY_HERE",
-	Programs: map[string]ProgramInfo{
-		"2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c": {
-			Discriminator: 2,
-			Filters:       []string{},
-		},
-	},
+	RemoteRPCURL: "https://us.rpc.fluxbeam.xyz",
+	RPCAPIKey:    "YOUR_API_KEY_HERE",
+	Programs:     []string{"2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c"},
+}
+
+// ProgressManager manages progress display for all methods
+type ProgressManager struct {
+	methods      map[string]*MethodProgress
+	mutex        sync.RWMutex
+	stopChan     chan struct{}
+	firstDisplay bool
+}
+
+// MethodProgress tracks progress for a single method
+type MethodProgress struct {
+	Name            string
+	StartTime       time.Time
+	EndTime         time.Time
+	SuccessCount    int64
+	FailureCount    int64
+	TotalRequests   int64
+	RequestsPerSec  float64
+	PercentComplete float64
+}
+
+// NewProgressManager creates a new progress manager
+func NewProgressManager() *ProgressManager {
+	return &ProgressManager{
+		methods:      make(map[string]*MethodProgress),
+		stopChan:     make(chan struct{}),
+		firstDisplay: true,
+	}
+}
+
+// RegisterMethod registers a method for progress tracking
+func (pm *ProgressManager) RegisterMethod(methodName string, duration int) {
+	pm.mutex.Lock()
+	defer pm.mutex.Unlock()
+
+	startTime := time.Now()
+	endTime := startTime.Add(time.Duration(duration) * time.Second)
+
+	pm.methods[methodName] = &MethodProgress{
+		Name:      methodName,
+		StartTime: startTime,
+		EndTime:   endTime,
+	}
+}
+
+// UpdateProgress updates progress for a specific method
+func (pm *ProgressManager) UpdateProgress(methodName string, successCount, failureCount int64) {
+	pm.mutex.Lock()
+	defer pm.mutex.Unlock()
+
+	if method, exists := pm.methods[methodName]; exists {
+		method.SuccessCount = successCount
+		method.FailureCount = failureCount
+		method.TotalRequests = successCount + failureCount
+
+		elapsed := time.Since(method.StartTime)
+		if elapsed.Seconds() > 0 {
+			method.RequestsPerSec = float64(method.TotalRequests) / elapsed.Seconds()
+		}
+
+		method.PercentComplete = (elapsed.Seconds() / float64(duration)) * 100
+		if method.PercentComplete > 100 {
+			method.PercentComplete = 100
+		}
+	}
+}
+
+// DisplayProgress displays all progress bars
+func (pm *ProgressManager) DisplayProgress() {
+	pm.mutex.RLock()
+	defer pm.mutex.RUnlock()
+
+	// Only clear and redraw if we've displayed before
+	if !pm.firstDisplay {
+		// Move up 3 lines and clear them
+		fmt.Print("\033[3A")
+		fmt.Print("\033[K\033[K\033[K")
+	} else {
+		pm.firstDisplay = false
+	}
+
+	// Display each method's progress
+	methodNames := []string{"getAccountInfo", "getMultipleAccounts", "getProgramAccounts"}
+
+	for _, methodName := range methodNames {
+		if method, exists := pm.methods[methodName]; exists {
+			filledChar, emptyChar, icon := getProgressBarStyle(methodName)
+
+			const barWidth = 20
+			progress := int(method.PercentComplete * float64(barWidth) / 100)
+			progressBar := strings.Repeat(filledChar, progress) + strings.Repeat(emptyChar, barWidth-progress)
+
+			elapsed := int(time.Since(method.StartTime).Seconds())
+
+			fmt.Printf("    %s [%s] %s: %.1f%% | %ds/%ds | Requests: %d | RPS: %.1f\n",
+				icon, progressBar, methodName, method.PercentComplete, elapsed, duration, method.TotalRequests, method.RequestsPerSec)
+		} else {
+			// Method not started yet
+			_, emptyChar, icon := getProgressBarStyle(methodName)
+			progressBar := strings.Repeat(emptyChar, 20)
+			fmt.Printf("    %s [%s] %s: 0.0%% | 0s/%ds | Requests: 0 | RPS: 0.0\n",
+				icon, progressBar, methodName, duration)
+		}
+	}
+}
+
+// StartProgressDisplay starts the progress display loop
+func (pm *ProgressManager) StartProgressDisplay() {
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			pm.DisplayProgress()
+		case <-pm.stopChan:
+			return
+		}
+	}
+}
+
+// Stop stops the progress display
+func (pm *ProgressManager) Stop() {
+	close(pm.stopChan)
 }
 
 // runallCmd represents the runall command
@@ -139,6 +244,20 @@ Example:
 		showProgressComplete("Statistics calculated")
 		displayResults(results, overallResult)
 	},
+}
+
+// getProgressBarStyle returns different progress bar styles for different methods
+func getProgressBarStyle(methodName string) (string, string, string) {
+	switch methodName {
+	case "getAccountInfo":
+		return "█", "░", "🔍" // Solid blocks with magnifying glass
+	case "getMultipleAccounts":
+		return "▓", "░", "📊" // Dark blocks with chart
+	case "getProgramAccounts":
+		return "▒", "░", "⚙️" // Medium blocks with gear
+	default:
+		return "█", "░", "⚡" // Default solid blocks with lightning
+	}
 }
 
 // showProgress displays a progress bar with the given message and percentage
@@ -217,7 +336,7 @@ func seedAccountsFromProgram(accountsFile string, config TestConfig) error {
 
 	// Get the program ID from default config
 	var programID string
-	for program := range config.Programs {
+	for _, program := range config.Programs {
 		programID = program
 		break
 	}
@@ -227,12 +346,12 @@ func seedAccountsFromProgram(accountsFile string, config TestConfig) error {
 	}
 
 	// Use the config RPC URL for seeding (remote RPC)
-	seedRPCURL := config.RPCURL
+	seedRPCURL := config.RemoteRPCURL
 	if config.RPCAPIKey != "" && config.RPCAPIKey != "YOUR_API_KEY_HERE" {
-		seedRPCURL = fmt.Sprintf("%s?key=%s", config.RPCURL, config.RPCAPIKey)
+		seedRPCURL = fmt.Sprintf("%s?key=%s", config.RemoteRPCURL, config.RPCAPIKey)
 	}
 
-	fmt.Printf("  🔍 Using remote RPC for seeding: %s\n", config.RPCURL)
+	fmt.Printf("  🔍 Using remote RPC for seeding: %s\n", config.RemoteRPCURL)
 	fmt.Printf("  🔍 Fetching accounts from program %s...\n", programID[:8]+"...")
 
 	// Create RPC client for seeding (using config RPC URL)
@@ -291,6 +410,20 @@ func runAllMethods(accountsFile string) ([]TestResult, error) {
 	fmt.Printf("  📊 Testing %d methods with %d accounts\n", len(methods), len(accounts))
 	fmt.Printf("  ⚙️  Concurrency: %d, Duration: %ds per method\n", concurrency, duration)
 
+	// Create progress manager
+	progressManager := NewProgressManager()
+
+	// Register all methods
+	for _, methodName := range methods {
+		progressManager.RegisterMethod(methodName, duration)
+	}
+
+	// Start progress display in background
+	go progressManager.StartProgressDisplay()
+
+	// Give a moment for initial display and to avoid interference with starting messages
+	time.Sleep(500 * time.Millisecond)
+
 	var results []TestResult
 	var wg sync.WaitGroup
 	var mutex sync.Mutex
@@ -301,7 +434,7 @@ func runAllMethods(accountsFile string) ([]TestResult, error) {
 		go func(method string, methodIndex int) {
 			defer wg.Done()
 
-			result := runSingleMethod(method, accounts, methodIndex+1, len(methods))
+			result := runSingleMethod(method, accounts, methodIndex+1, len(methods), progressManager)
 
 			mutex.Lock()
 			results = append(results, result)
@@ -311,11 +444,22 @@ func runAllMethods(accountsFile string) ([]TestResult, error) {
 
 	wg.Wait()
 
+	// Stop progress display
+	progressManager.Stop()
+
+	// Wait for the display goroutine to finish
+	time.Sleep(500 * time.Millisecond)
+
+	// Simple completion message without complex clearing
+	fmt.Println()
+	fmt.Println("    ✅ All methods completed successfully!")
+	fmt.Println()
+
 	return results, nil
 }
 
 // runSingleMethod runs a single method test and returns the result
-func runSingleMethod(methodName string, accounts []string, methodIndex, totalMethods int) TestResult {
+func runSingleMethod(methodName string, accounts []string, methodIndex, totalMethods int, progressManager *ProgressManager) TestResult {
 	fmt.Printf("  🔄 [%d/%d] Starting %s test...\n", methodIndex, totalMethods, methodName)
 
 	// Create RPC client with target RPC URL (from --url flag)
@@ -336,31 +480,20 @@ func runSingleMethod(methodName string, accounts []string, methodIndex, totalMet
 	// Create channels for workers
 	stop := make(chan struct{})
 
-	// Progress reporting
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
+	// Progress update ticker
+	progressTicker := time.NewTicker(500 * time.Millisecond)
+	defer progressTicker.Stop()
 
+	// Progress update goroutine
 	go func() {
 		for {
 			select {
-			case <-ticker.C:
+			case <-progressTicker.C:
 				if time.Now().After(endTime) {
 					return
 				}
-
 				mutex.Lock()
-				elapsed := time.Since(startTime)
-				currentTotal := successCount + failureCount
-				currentRPS := float64(currentTotal) / elapsed.Seconds()
-				percentComplete := (elapsed.Seconds() / float64(duration)) * 100
-
-				// Create a simple progress bar
-				const barWidth = 20
-				progress := int(percentComplete * float64(barWidth) / 100)
-				progressBar := strings.Repeat("█", progress) + strings.Repeat("░", barWidth-progress)
-
-				fmt.Printf("\r    [%s] %s: %.1f%% | %ds/%ds | Requests: %d | RPS: %.1f",
-					progressBar, methodName, percentComplete, int(elapsed.Seconds()), duration, currentTotal, currentRPS)
+				progressManager.UpdateProgress(methodName, successCount, failureCount)
 				mutex.Unlock()
 			case <-stop:
 				return
@@ -386,7 +519,29 @@ func runSingleMethod(methodName string, accounts []string, methodIndex, totalMet
 
 					// Execute the specified method
 					startReq := time.Now()
-					err := Method(methodName, rpcTest, accounts[workerID%len(accounts)])
+					var err error
+
+					if methodName == "getMultipleAccounts" {
+						// For getMultipleAccounts, use multiple accounts
+						// Take up to 5 accounts for each request
+						numAccounts := rand.Intn(10) + 5
+						if len(accounts) < numAccounts {
+							numAccounts = len(accounts)
+						}
+
+						// Create a batch of accounts starting from workerID
+						var batchAccounts []string
+						for i := 0; i < numAccounts; i++ {
+							accountIndex := (workerID + i) % len(accounts)
+							batchAccounts = append(batchAccounts, accounts[accountIndex])
+						}
+
+						err = Method(methodName, rpcTest, batchAccounts...)
+					} else {
+						// For other methods, use single account
+						err = Method(methodName, rpcTest, accounts[workerID%len(accounts)])
+					}
+
 					reqDuration := time.Since(startReq)
 
 					mutex.Lock()
@@ -415,8 +570,8 @@ func runSingleMethod(methodName string, accounts []string, methodIndex, totalMet
 	// Wait for all workers to finish
 	wg.Wait()
 
-	// Clear the progress line and show completion
-	fmt.Printf("\r    ✅ %s completed successfully\n", methodName)
+	// Final progress update
+	progressManager.UpdateProgress(methodName, successCount, failureCount)
 
 	// Calculate results
 	totalDuration := time.Since(startTime)
