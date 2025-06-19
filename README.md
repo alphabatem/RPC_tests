@@ -4,14 +4,19 @@ A CLI tool for stress testing and benchmarking Solana RPC endpoints with customi
 
 ## Features
 
-- Test different Solana RPC methods (getAccountInfo, getProgramAccounts, getMultipleAccounts)
-- Configure concurrency level for parallel requests
-- Specify test duration
-- Provide accounts/programs individually or from a file
-- Seed account addresses from programs for testing purposes
-- Test against both public and local RPC endpoints
-- Comprehensive performance metrics (requests/second, latency statistics)
-- Limit the number of accounts/programs to process
+- **Comprehensive Test Suite**: Run all RPC methods simultaneously with the `runall` command
+- **Dual RPC Architecture**: Use remote RPC for seeding accounts and target RPC for testing
+- **Dynamic Configuration**: Generate and load test configurations with API keys
+- **Smart Progress Tracking**: Real-time progress bars and detailed statistics
+- **Dynamic Latency Display**: Automatic unit selection (μs, ms, s) based on performance
+- **Test different Solana RPC methods** (getAccountInfo, getProgramAccounts, getMultipleAccounts)
+- **Configure concurrency level** for parallel requests
+- **Specify test duration**
+- **Provide accounts/programs** individually or from a file
+- **Seed account addresses** from programs for testing purposes
+- **Test against both public and local RPC endpoints**
+- **Comprehensive performance metrics** (requests/second, latency statistics)
+- **Limit the number of accounts/programs** to process
 
 ## Installation
 
@@ -19,7 +24,42 @@ A CLI tool for stress testing and benchmarking Solana RPC endpoints with customi
 go build -o rpc_test
 ```
 
+## Quick Start
+
+### Comprehensive Testing with `runall`
+
+The `runall` command provides a complete testing workflow:
+
+```bash
+# Run comprehensive test suite with API key and target RPC
+./rpc_test runall --api-key YOUR_API_KEY --url https://your-target-rpc.com
+
+# Run with custom settings
+./rpc_test runall --api-key YOUR_API_KEY --url https://your-target-rpc.com --concurrency 10 --duration 30
+
+# Limit accounts used for testing
+./rpc_test runall --api-key YOUR_API_KEY --url https://your-target-rpc.com --limit 50
+```
+
+**What `runall` does:**
+1. **Generates test configuration** with your API key
+2. **Seeds 100 accounts** from the specified program using remote RPC
+3. **Runs all RPC methods** concurrently against your target RPC
+4. **Provides comprehensive statistics** with dynamic latency display
+
 ## Usage
+
+### Comprehensive Testing
+
+```bash
+# Basic comprehensive test (requires --url flag)
+./rpc_test runall --api-key YOUR_API_KEY --url https://your-target-rpc.com
+
+# Advanced comprehensive test
+./rpc_test runall --api-key YOUR_API_KEY --url https://your-target-rpc.com --concurrency 15 --duration 45 --limit 200
+```
+
+### Individual Method Testing
 
 ```bash
 # Basic usage for getAccountInfo
@@ -55,6 +95,7 @@ go build -o rpc_test
 
 ### Available Commands
 
+- `runall`: **NEW** - Execute comprehensive test suite with all methods
 - `getAccountInfo`: Run tests against the getAccountInfo RPC method
 - `getMultipleAccounts`: Run tests against the getMultipleAccounts RPC method
 - `getProgramAccounts`: Run tests against the getProgramAccounts RPC method
@@ -69,6 +110,15 @@ go build -o rpc_test
 - `-l, --limit`: Limit the number of accounts/programs to process (0 for no limit)
 
 ### Command-specific Flags
+
+#### runall
+
+- `-k, --api-key`: API key for RPC endpoint (will be saved in config)
+- `-c, --concurrency`: Number of concurrent requests per method (default: 5)
+- `-d, --duration`: Test duration in seconds per method (default: 15)
+- `-l, --limit`: Limit the number of accounts to use (0 for no limit)
+
+**Note**: The `--url` flag is **REQUIRED** for `runall` command as it specifies the target RPC for testing.
 
 #### getAccountInfo
 
@@ -91,6 +141,24 @@ go build -o rpc_test
 - `-f, --program-file`: File containing program addresses (one per line)
 - `-o, --output`: Output file to store account addresses (default: "accounts.txt")
 
+## Dual RPC Architecture
+
+The `runall` command uses a dual RPC architecture for optimal performance:
+
+### Remote RPC (Config)
+- **Purpose**: Seeding account data from programs
+- **Source**: Configuration file with API key
+- **Use Case**: Fetching reliable account lists for testing
+
+### Target RPC (--url flag)
+- **Purpose**: Running all test methods
+- **Source**: `--url` command line flag
+- **Use Case**: The RPC endpoint you want to test/benchmark
+
+This separation allows you to:
+- Use a **reliable remote RPC** for getting account data
+- Test any **target RPC endpoint** for performance evaluation
+
 ## Example File Format
 
 ### Account File (for getAccountInfo and getMultipleAccounts)
@@ -109,24 +177,137 @@ ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL
 ComputeBudget111111111111111111111111111111
 ```
 
+### Generated Config File (runall command)
+
+```json
+{
+  "maximum_ram": 8,
+  "maximum_disk": 10,
+  "location": "./data/",
+  "mode": "normal",
+  "cache_requests": false,
+  "monitoring": false,
+  "monitoring_url": "",
+  "log_level": "INFO",
+  "rpc_url": "https://us.rpc.fluxbeam.xyz",
+  "rpc_apikey": "YOUR_API_KEY_HERE",
+  "programs": {
+    "2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c": {
+      "discriminator": 2,
+      "filters": []
+    }
+  }
+}
+```
+
 ## Metrics Explanation
 
 The test suite reports the following metrics:
 
+### Basic Metrics
 - **Total Duration**: Actual time taken to complete the test
 - **Total Requests**: Number of requests processed
 - **Successful Requests**: Count and percentage of successful requests
 - **Failed Requests**: Count and percentage of failed requests
 - **Requests per second**: Average number of requests processed per second
-- **Latency Statistics**: 
-  - Min: Minimum request latency in milliseconds
-  - Max: Maximum request latency in milliseconds
-  - Avg: Average request latency in milliseconds
+
+### Enhanced Latency Statistics (Dynamic Units)
+- **Min Latency**: Minimum request latency (auto-formatted: μs, ms, or s)
+- **Max Latency**: Maximum request latency (auto-formatted: μs, ms, or s)
+- **Avg Latency**: Average request latency (auto-formatted: μs, ms, or s)
+
+### Comprehensive Test Results (runall command)
+- **Individual Method Results**: Detailed stats for each RPC method
+- **Overall Test Summary**: Combined statistics across all methods
+- **Performance Insights**: Best/worst performing methods with ratios
+- **Latency Comparison**: Fastest vs slowest methods with performance ratios
+
+## Example Output
+
+### runall Command Output
+
+```
+🚀 Starting comprehensive RPC test suite...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 Step 1: Generating test configuration...
+[██████████████████████████████] Config generated... ✅
+✅ Test configuration saved to: ./config.json
+
+📂 Step 1.5: Loading configuration with API key...
+[██████████████████████████████] Config loaded... ✅
+✅ Configuration loaded successfully
+
+🌱 Step 2: Seeding accounts from program...
+  🔍 Using remote RPC for seeding: https://us.rpc.fluxbeam.xyz
+  🔍 Fetching accounts from program 2wT8Yq49k...
+  ✅ Successfully seeded accounts
+✅ Accounts seeded to: ./data/test_accounts.txt
+
+⚡ Step 3: Running all RPC methods...
+  🎯 Using target RPC for testing: https://your-target-rpc.com
+  📊 Testing 3 methods with 100 accounts
+  ⚙️  Concurrency: 5, Duration: 15s per method
+  🔄 [1/3] Starting getAccountInfo test...
+  🔄 [2/3] Starting getMultipleAccounts test...
+  🔄 [3/3] Starting getProgramAccounts test...
+    [████████████████░░░░] getAccountInfo: 80.0% | 12s/15s | Requests: 1250 | RPS: 104.2
+    [███████████████░░░░░] getMultipleAccounts: 73.3% | 11s/15s | Requests: 1100 | RPS: 100.0
+    [█████████████████░░░] getProgramAccounts: 86.7% | 13s/15s | Requests: 1300 | RPS: 100.0
+    ✅ getAccountInfo completed successfully
+    ✅ getMultipleAccounts completed successfully
+    ✅ getProgramAccounts completed successfully
+
+📊 Step 4: Generating comprehensive statistics...
+[██████████████████████████████] Statistics calculated... ✅
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 COMPREHENSIVE TEST RESULTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔍 INDIVIDUAL METHOD RESULTS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📈 GETACCOUNTINFO:
+   Duration:         15.00 seconds
+   Total Requests:    1250
+   Successful:        1245 (99.60%)
+   Failed:            5 (0.40%)
+   Requests/second:   83.00
+   Min Latency:       45.23 μs
+   Max Latency:       125.67 μs
+   Avg Latency:       78.45 μs
+
+🎯 OVERALL TEST SUMMARY:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🕒 Total Duration:     45.00 seconds
+🔢 Total Requests:      3650
+✅ Total Successful:    3635 (99.59%)
+❌ Total Failed:        15 (0.41%)
+⚡ Overall RPS:         81.11
+📊 Methods Tested:      3
+
+💡 PERFORMANCE INSIGHTS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🏆 Best Performing:    getAccountInfo (83.00 RPS)
+🐌 Worst Performing:   getProgramAccounts (80.00 RPS)
+📊 Performance Ratio:  96.4% (worst/best)
+
+⏱️  LATENCY COMPARISON:
+⚡ Fastest Method:     getAccountInfo (78.45 μs avg)
+🐌 Slowest Method:     getProgramAccounts (245.12 μs avg)
+📊 Latency Ratio:      3.1x (slowest/fastest)
+
+✅ Comprehensive test suite completed successfully!
+```
 
 ## Use Cases
 
-- Compare performance between different Solana RPC providers
-- Optimize application settings for RPC requests
-- Identify performance bottlenecks in RPC interactions
-- Test the stability of RPC endpoints under load
-- Benchmark local Solana validator nodes 
+- **Compare performance** between different Solana RPC providers
+- **Optimize application settings** for RPC requests
+- **Identify performance bottlenecks** in RPC interactions
+- **Test the stability** of RPC endpoints under load
+- **Benchmark local Solana validator nodes**
+- **Comprehensive RPC evaluation** with the `runall` command
+- **API key management** for premium RPC services
+- **Dual RPC testing** (remote for data, target for performance) 

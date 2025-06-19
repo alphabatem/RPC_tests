@@ -19,6 +19,7 @@ var (
 	accounts     []string
 	accountsFile string
 	limit        int
+	apiKey       string
 )
 
 func Method(name string, rpcTest *methods.RPCTest, account string) error {
@@ -167,7 +168,6 @@ func RunMethodTest(methodName string) {
 	// Wait for all workers to finish
 	wg.Wait()
 
-
 	// Calculate and display results
 	totalDuration := time.Since(startTime)
 	totalRequests := successCount + failureCount
@@ -190,8 +190,8 @@ func RunMethodTest(methodName string) {
 		fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 		fmt.Println("⏱️  LATENCY STATISTICS")
 		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		fmt.Printf("Min: %.2f ms\n", float64(minLatency.Microseconds())/1000)
-		fmt.Printf("Max: %.2f ms\n", float64(maxLatency.Microseconds())/1000)
-		fmt.Printf("Avg: %.2f ms\n", float64(avgLatency.Microseconds())/1000)
+		fmt.Printf("Min: %.2f μs\n", float64(minLatency.Microseconds()))
+		fmt.Printf("Max: %.2f μs\n", float64(maxLatency.Microseconds()))
+		fmt.Printf("Avg: %.2f μs\n", float64(avgLatency.Microseconds()))
 	}
 }
