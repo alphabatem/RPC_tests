@@ -1,0 +1,7 @@
+{
+    "rpc_url": "https://us.rpc.fluxbeam.xyz",
+    "rpc_apikey": "YOUR_API_KEY_HERE",
+    "programs": [
+      "2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c"
+    ]
+  }
