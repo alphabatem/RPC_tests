@@ -205,8 +205,8 @@ func RunMethodTest(methodName string) {
 		fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 		fmt.Println("⏱️  LATENCY STATISTICS")
 		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		fmt.Printf("Min: %.2f μs\n", float64(minLatency.Microseconds()))
-		fmt.Printf("Max: %.2f μs\n", float64(maxLatency.Microseconds()))
-		fmt.Printf("Avg: %.2f μs\n", float64(avgLatency.Microseconds()))
+		fmt.Printf("Min: %s\n", formatLatency(minLatency))
+		fmt.Printf("Max: %s\n", formatLatency(maxLatency))
+		fmt.Printf("Avg: %s\n", formatLatency(avgLatency))
 	}
 }
