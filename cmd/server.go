@@ -21,9 +21,6 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
-// @host localhost:8080
-// @BasePath /
-
 // ServerConfig represents the server configuration
 type ServerConfig struct {
 	Port string `json:"port"`
@@ -99,7 +96,7 @@ var (
 	serverHost  string
 )
 
-// @host localhost:8081
+// @host localhost:8888
 // @BasePath /
 
 // serverCmd represents the server command
@@ -116,7 +113,7 @@ The server provides the following endpoints:
 - GET /swagger/*any - Swagger documentation
 
 Example:
-  rpc_test server --port 8081 --host localhost`,
+  rpc_test server --port 8888 --host localhost`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("🚀 Starting RPC Test Server with Gin...")
 		fmt.Printf("📍 Server will be available at: http://%s:%s\n", serverHost, serverPort)
@@ -727,6 +724,6 @@ func init() {
 	RootCmd.AddCommand(serverCmd)
 
 	// Add server-specific flags
-	serverCmd.Flags().StringVarP(&serverPort, "port", "p", "8081", "Server port")
+	serverCmd.Flags().StringVarP(&serverPort, "port", "p", "8888", "Server port")
 	serverCmd.Flags().StringVarP(&serverHost, "host", "s", "localhost", "Server host")
 }
