@@ -15,12 +15,14 @@ import (
 
 	_ "rpc_test/docs"
 
-	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/cobra"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
+
+// @host localhost:8080
+// @BasePath /
 
 // ServerConfig represents the server configuration
 type ServerConfig struct {
@@ -127,14 +129,22 @@ Example:
 
 		// Set Gin mode
 		gin.SetMode(gin.ReleaseMode)
-		config := cors.DefaultConfig()
-		config.AllowAllOrigins = true
-		config.AllowCredentials = true
 		// Create Gin router
 		r := gin.Default()
 
 		// Add CORS middleware
-		r.Use(cors.Default())
+		r.Use(func(c *gin.Context) {
+			c.Header("Access-Control-Allow-Origin", "*")
+			c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
+
+			if c.Request.Method == "OPTIONS" {
+				c.AbortWithStatus(204)
+				return
+			}
+
+			c.Next()
+		})
 
 		// Setup routes
 		setupRoutes(r)
