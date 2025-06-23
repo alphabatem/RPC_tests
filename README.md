@@ -1,8 +1,8 @@
 # RPC Test Suite
 
-A CLI tool for stress testing and benchmarking Solana RPC endpoints with customizable concurrency and account inputs. This tool helps developers evaluate the performance of different RPC endpoints, optimize applications, and identify potential bottlenecks.
+A comprehensive CLI tool for stress testing and benchmarking Solana RPC endpoints with customizable concurrency and account inputs. This tool helps developers evaluate the performance of different RPC endpoints, optimize applications, and identify potential bottlenecks in Solana blockchain interactions.
 
-## Features
+## 🚀 Features
 
 - **Comprehensive Test Suite**: Run all RPC methods simultaneously with the `runall` command
 - **Dual RPC Architecture**: Use remote RPC for seeding accounts and target RPC for testing
@@ -17,14 +17,52 @@ A CLI tool for stress testing and benchmarking Solana RPC endpoints with customi
 - **Test against both public and local RPC endpoints**
 - **Comprehensive performance metrics** (requests/second, latency statistics)
 - **Limit the number of accounts/programs** to process
+- **Real-time progress monitoring** with visual progress bars
+- **Configurable test parameters** for different testing scenarios
 
-## Installation
+## 📋 Table of Contents
+
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Project Structure](#project-structure)
+- [Architecture Overview](#architecture-overview)
+- [Usage](#usage)
+- [Configuration](#configuration)
+- [API Reference](#api-reference)
+- [Examples](#examples)
+- [Troubleshooting](#troubleshooting)
+- [Development](#development)
+- [Contributing](#contributing)
+
+## 🛠️ Installation
+
+### Prerequisites
+
+- Go 1.24.2 or higher
+- Git
+
+### Build from Source
 
 ```bash
+# Clone the repository
+git clone <repository-url>
+cd rpc_test
+
+# Build the application
 go build -o rpc_test
+
+# Make it executable (Linux/macOS)
+chmod +x rpc_test
 ```
 
-## Quick Start
+### Verify Installation
+
+```bash
+# Check if the binary was created successfully
+./rpc_test --help
+```
+
+## 🚀 Quick Start
 
 ### Comprehensive Testing with `runall`
 
@@ -47,7 +85,71 @@ The `runall` command provides a complete testing workflow:
 3. **Runs all RPC methods** concurrently against your target RPC
 4. **Provides comprehensive statistics** with dynamic latency display
 
-## Usage
+## 📁 Project Structure
+
+```
+rpc_test/
+├── main.go                 # Application entry point
+├── go.mod                  # Go module dependencies
+├── go.sum                  # Dependency checksums
+├── README.md              # This file
+├── config-template.json   # Template configuration file
+├── config.json            # Generated configuration (gitignored)
+├── .gitignore             # Git ignore rules
+├── rpc_test               # Compiled binary (gitignored)
+├── cmd/                   # Command implementations
+│   ├── root.go           # Root command and global flags
+│   ├── common.go         # Shared utilities and variables
+│   ├── runall.go         # Comprehensive test suite command
+│   ├── getAccountInfo.go # getAccountInfo RPC testing
+│   ├── getMultipleAccounts.go # getMultipleAccounts RPC testing
+│   ├── getProgramAccounts.go # getProgramAccounts RPC testing
+│   └── seed.go           # Account seeding functionality
+├── methods/               # RPC method implementations
+│   ├── rpc.go            # Base RPC client wrapper
+│   ├── getAccountInfo.go # getAccountInfo implementation
+│   ├── getMultipleAccounts.go # getMultipleAccounts implementation
+│   ├── getProgramAccounts.go # getProgramAccounts implementation
+│   └── seed.go           # Account seeding logic
+├── data/                  # Test data and generated files
+│   └── test_accounts.txt # Generated test accounts
+└── *.txt                 # Example account/program files
+```
+
+## 🏗️ Architecture Overview
+
+### Core Components
+
+1. **Command Layer** (`cmd/`): Implements CLI commands using Cobra framework
+2. **Method Layer** (`methods/`): Contains RPC method implementations using solana-go
+3. **Configuration Management**: Dynamic config generation and loading
+4. **Progress Tracking**: Real-time progress monitoring with visual feedback
+5. **Statistics Engine**: Comprehensive metrics calculation and reporting
+
+### Dual RPC Architecture
+
+The application uses a sophisticated dual RPC architecture for optimal performance:
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Remote RPC    │    │   Target RPC    │    │   Local Files   │
+│   (Config)      │    │   (--url flag)  │    │   (data/)       │
+├─────────────────┤    ├─────────────────┤    ├─────────────────┤
+│ • Seeding       │    │ • Testing       │    │ • Account lists │
+│ • Data fetch    │    │ • Benchmarking  │    │ • Config files  │
+│ • Reliable      │    │ • Performance   │    │ • Results       │
+│ • API key auth  │    │ • Load testing  │    │ • Logs          │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+### Data Flow
+
+1. **Configuration Phase**: Generate/load config with API keys
+2. **Seeding Phase**: Fetch account data from reliable remote RPC
+3. **Testing Phase**: Run tests against target RPC endpoint
+4. **Analysis Phase**: Calculate and display comprehensive statistics
+
+## 📖 Usage
 
 ### Comprehensive Testing
 
@@ -141,43 +243,11 @@ The `runall` command provides a complete testing workflow:
 - `-f, --program-file`: File containing program addresses (one per line)
 - `-o, --output`: Output file to store account addresses (default: "accounts.txt")
 
-## Dual RPC Architecture
+## ⚙️ Configuration
 
-The `runall` command uses a dual RPC architecture for optimal performance:
+### Configuration File Structure
 
-### Remote RPC (Config)
-- **Purpose**: Seeding account data from programs
-- **Source**: Configuration file with API key
-- **Use Case**: Fetching reliable account lists for testing
-
-### Target RPC (--url flag)
-- **Purpose**: Running all test methods
-- **Source**: `--url` command line flag
-- **Use Case**: The RPC endpoint you want to test/benchmark
-
-This separation allows you to:
-- Use a **reliable remote RPC** for getting account data
-- Test any **target RPC endpoint** for performance evaluation
-
-## Example File Format
-
-### Account File (for getAccountInfo and getMultipleAccounts)
-
-```
-9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin
-6ycRTkj1RM3L4sZcKHk8HULaFvEBaLGAiQpVpC9MPcKm
-7Np41oeYqPefeNQEHSv1UDhYrehxin3NStELsSKCT4K2
-```
-
-### Program File (for getProgramAccounts and seed)
-
-```
-TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
-ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL
-ComputeBudget111111111111111111111111111111
-```
-
-### Generated Config File (runall command)
+The application generates a `config.json` file with the following structure:
 
 ```json
 {
@@ -200,31 +270,86 @@ ComputeBudget111111111111111111111111111111
 }
 ```
 
-## Metrics Explanation
+### Environment Variables
 
-The test suite reports the following metrics:
+The application respects the following environment variables:
 
-### Basic Metrics
+- `RPC_API_KEY`: Default API key for RPC endpoints
+- `RPC_URL`: Default RPC endpoint URL
+- `CONCURRENCY`: Default concurrency level
+- `DURATION`: Default test duration
+
+### Configuration Management
+
+1. **Auto-generation**: The `runall` command automatically generates configuration
+2. **API Key Storage**: API keys are securely stored in the config file
+3. **Template-based**: Uses `config-template.json` as a base template
+4. **Dynamic Loading**: Configuration is loaded at runtime
+
+## 📊 API Reference
+
+### RPC Methods Supported
+
+#### getAccountInfo
+- **Purpose**: Fetch account information for specific addresses
+- **Use Case**: Testing account data retrieval performance
+- **Parameters**: Account addresses (single or multiple)
+
+#### getMultipleAccounts
+- **Purpose**: Fetch information for multiple accounts in a single request
+- **Use Case**: Testing batch account data retrieval
+- **Parameters**: Multiple account addresses
+
+#### getProgramAccounts
+- **Purpose**: Fetch all accounts owned by a specific program
+- **Use Case**: Testing program account enumeration
+- **Parameters**: Program addresses
+
+### Performance Metrics
+
+The test suite reports comprehensive metrics:
+
+#### Basic Metrics
 - **Total Duration**: Actual time taken to complete the test
 - **Total Requests**: Number of requests processed
 - **Successful Requests**: Count and percentage of successful requests
 - **Failed Requests**: Count and percentage of failed requests
 - **Requests per second**: Average number of requests processed per second
 
-### Enhanced Latency Statistics (Dynamic Units)
+#### Enhanced Latency Statistics (Dynamic Units)
 - **Min Latency**: Minimum request latency (auto-formatted: μs, ms, or s)
 - **Max Latency**: Maximum request latency (auto-formatted: μs, ms, or s)
 - **Avg Latency**: Average request latency (auto-formatted: μs, ms, or s)
 
-### Comprehensive Test Results (runall command)
+#### Comprehensive Test Results (runall command)
 - **Individual Method Results**: Detailed stats for each RPC method
 - **Overall Test Summary**: Combined statistics across all methods
 - **Performance Insights**: Best/worst performing methods with ratios
 - **Latency Comparison**: Fastest vs slowest methods with performance ratios
 
-## Example Output
+## 📝 Examples
 
-### runall Command Output
+### Example File Format
+
+#### Account File (for getAccountInfo and getMultipleAccounts)
+
+```
+9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin
+6ycRTkj1RM3L4sZcKHk8HULaFvEBaLGAiQpVpC9MPcKm
+7Np41oeYqPefeNQEHSv1UDhYrehxin3NStELsSKCT4K2
+```
+
+#### Program File (for getProgramAccounts and seed)
+
+```
+TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL
+ComputeBudget111111111111111111111111111111
+```
+
+### Example Output
+
+#### runall Command Output
 
 ```
 🚀 Starting comprehensive RPC test suite...
@@ -301,13 +426,182 @@ The test suite reports the following metrics:
 ✅ Comprehensive test suite completed successfully!
 ```
 
-## Use Cases
+## 🔧 Troubleshooting
 
-- **Compare performance** between different Solana RPC providers
-- **Optimize application settings** for RPC requests
-- **Identify performance bottlenecks** in RPC interactions
-- **Test the stability** of RPC endpoints under load
-- **Benchmark local Solana validator nodes**
-- **Comprehensive RPC evaluation** with the `runall` command
-- **API key management** for premium RPC services
-- **Dual RPC testing** (remote for data, target for performance) 
+### Common Issues
+
+#### 1. API Key Authentication Errors
+```
+Error: authentication failed
+```
+**Solution**: Ensure your API key is valid and has the necessary permissions.
+
+#### 2. RPC Endpoint Connection Issues
+```
+Error: connection refused
+```
+**Solution**: Verify the RPC endpoint URL and check network connectivity.
+
+#### 3. Rate Limiting
+```
+Error: rate limit exceeded
+```
+**Solution**: Reduce concurrency or increase delays between requests.
+
+#### 4. Insufficient Account Data
+```
+Error: no accounts found
+```
+**Solution**: Check if the program address is valid and contains accounts.
+
+### Debug Mode
+
+Enable verbose logging for debugging:
+
+```bash
+# Set log level to DEBUG
+export LOG_LEVEL=DEBUG
+./rpc_test runall --api-key YOUR_API_KEY --url https://your-target-rpc.com
+```
+
+### Performance Optimization
+
+1. **Concurrency Tuning**: Start with low concurrency and gradually increase
+2. **Duration Adjustment**: Use longer durations for more accurate metrics
+3. **Account Limits**: Limit accounts for faster testing iterations
+4. **Network Optimization**: Use RPC endpoints closer to your location
+
+## 🛠️ Development
+
+### Prerequisites
+
+- Go 1.24.2+
+- Git
+- Make (optional, for build scripts)
+
+### Development Setup
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd rpc_test
+
+# Install dependencies
+go mod download
+
+# Run tests
+go test ./...
+
+# Build for development
+go build -o rpc_test
+
+# Run with development flags
+./rpc_test --help
+```
+
+### Project Dependencies
+
+Key dependencies used in this project:
+
+- **github.com/spf13/cobra**: CLI framework
+- **github.com/gagliardetto/solana-go**: Solana blockchain interaction
+- **go.uber.org/zap**: Structured logging
+- **github.com/fatih/color**: Colored terminal output
+
+### Code Structure
+
+#### Command Layer (`cmd/`)
+- **root.go**: Main command setup and global flags
+- **common.go**: Shared utilities and variables
+- **runall.go**: Comprehensive test suite implementation
+- **getAccountInfo.go**: getAccountInfo command
+- **getMultipleAccounts.go**: getMultipleAccounts command
+- **getProgramAccounts.go**: getProgramAccounts command
+- **seed.go**: Account seeding command
+
+#### Method Layer (`methods/`)
+- **rpc.go**: Base RPC client wrapper
+- **getAccountInfo.go**: getAccountInfo RPC implementation
+- **getMultipleAccounts.go**: getMultipleAccounts RPC implementation
+- **getProgramAccounts.go**: getProgramAccounts RPC implementation
+- **seed.go**: Account seeding logic
+
+### Testing
+
+```bash
+# Run all tests
+go test ./...
+
+# Run tests with coverage
+go test -cover ./...
+
+# Run specific test
+go test ./methods -v
+
+# Run benchmarks
+go test -bench=. ./...
+```
+
+### Building
+
+```bash
+# Build for current platform
+go build -o rpc_test
+
+# Build for specific platform
+GOOS=linux GOARCH=amd64 go build -o rpc_test_linux
+GOOS=darwin GOARCH=amd64 go build -o rpc_test_macos
+GOOS=windows GOARCH=amd64 go build -o rpc_test_windows.exe
+```
+
+## 🤝 Contributing
+
+We welcome contributions! Please follow these guidelines:
+
+### Development Workflow
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/your-feature`
+3. Make your changes
+4. Add tests for new functionality
+5. Run the test suite: `go test ./...`
+6. Commit your changes: `git commit -am 'Add new feature'`
+7. Push to the branch: `git push origin feature/your-feature`
+8. Submit a pull request
+
+### Code Style
+
+- Follow Go conventions and best practices
+- Use meaningful variable and function names
+- Add comments for complex logic
+- Ensure all tests pass
+- Update documentation as needed
+
+### Testing Guidelines
+
+- Write unit tests for new functionality
+- Ensure existing tests continue to pass
+- Add integration tests for new commands
+- Test with different RPC endpoints
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 🙏 Acknowledgments
+
+- Solana Labs for the Solana blockchain
+- Gagliardetto for the excellent solana-go library
+- The Solana community for feedback and contributions
+
+## 📞 Support
+
+For support and questions:
+
+- Create an issue on GitHub
+- Check the troubleshooting section
+- Review the examples and documentation
+
+---
+
+**Note**: This tool is designed for testing and benchmarking purposes. Please use responsibly and respect RPC endpoint rate limits and terms of service. 
