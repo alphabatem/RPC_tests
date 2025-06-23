@@ -727,6 +727,6 @@ func init() {
 	RootCmd.AddCommand(serverCmd)
 
 	// Add server-specific flags
-	serverCmd.Flags().StringVarP(&serverPort, "port", "p", "8080", "Server port")
+	serverCmd.Flags().StringVarP(&serverPort, "port", "p", "8081", "Server port")
 	serverCmd.Flags().StringVarP(&serverHost, "host", "s", "localhost", "Server host")
 }
