@@ -13,7 +13,12 @@ import (
 	"sync"
 	"time"
 
+	_ "rpc_test/docs"
+
+	"github.com/gin-gonic/gin"
 	"github.com/spf13/cobra"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 // ServerConfig represents the server configuration
@@ -32,10 +37,10 @@ type MethodConfig struct {
 
 // TestRequest represents a test request from the API
 type TestRequest struct {
-	RemoteRPCURL string                  `json:"rpc_url"`
+	RemoteRPCURL string                  `json:"rpc_url" binding:"required"`
 	RPCAPIKey    string                  `json:"rpc_apikey"`
 	Programs     []string                `json:"programs"`
-	TargetRPCURL string                  `json:"target_rpc_url"`
+	TargetRPCURL string                  `json:"target_rpc_url" binding:"required"`
 	Methods      map[string]MethodConfig `json:"methods"`
 	GlobalConfig MethodConfig            `json:"global_config"`
 }
@@ -77,11 +82,22 @@ type TestProgress struct {
 	SuccessRate     float64 `json:"success_rate"`
 }
 
+// APIResponse represents a generic API response
+type APIResponse struct {
+	Success   bool        `json:"success"`
+	Message   string      `json:"message"`
+	Data      interface{} `json:"data,omitempty"`
+	Timestamp time.Time   `json:"timestamp"`
+}
+
 var (
 	testManager *TestManager
 	serverPort  string
 	serverHost  string
 )
+
+// @host localhost:8081
+// @BasePath /
 
 // serverCmd represents the server command
 var serverCmd = &cobra.Command{
@@ -94,11 +110,12 @@ The server provides the following endpoints:
 - GET /test/{id} - Get test results
 - GET /tests - List all tests
 - DELETE /test/{id} - Delete a test
+- GET /swagger/*any - Swagger documentation
 
 Example:
-  rpc_test server --port 8080 --host localhost`,
+  rpc_test server --port 8081 --host localhost`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("🚀 Starting RPC Test Server...")
+		fmt.Println("🚀 Starting RPC Test Server with Gin...")
 		fmt.Printf("📍 Server will be available at: http://%s:%s\n", serverHost, serverPort)
 		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
@@ -107,11 +124,28 @@ Example:
 			tests: make(map[string]*RunningTest),
 		}
 
+		// Set Gin mode
+		gin.SetMode(gin.ReleaseMode)
+
+		// Create Gin router
+		r := gin.Default()
+
+		// Add CORS middleware
+		r.Use(func(c *gin.Context) {
+			c.Header("Access-Control-Allow-Origin", "*")
+			c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
+
+			if c.Request.Method == "OPTIONS" {
+				c.AbortWithStatus(204)
+				return
+			}
+
+			c.Next()
+		})
+
 		// Setup routes
-		http.HandleFunc("/", handleRoot)
-		http.HandleFunc("/test", handleTest)
-		http.HandleFunc("/tests", handleTests)
-		http.HandleFunc("/test/", handleTestByID)
+		setupRoutes(r)
 
 		// Start server
 		addr := fmt.Sprintf("%s:%s", serverHost, serverPort)
@@ -123,55 +157,79 @@ Example:
 		fmt.Println("   GET /test/{id} - Get test results")
 		fmt.Println("   GET /tests     - List all tests")
 		fmt.Println("   DELETE /test/{id} - Delete a test")
+		fmt.Println("   GET /swagger/*any - Swagger documentation")
 		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-		if err := http.ListenAndServe(addr, nil); err != nil {
+		if err := r.Run(addr); err != nil {
 			log.Fatalf("Failed to start server: %v", err)
 		}
 	},
 }
 
-// handleRoot handles the root endpoint
-func handleRoot(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
-	}
+// setupRoutes configures all the API routes
+func setupRoutes(r *gin.Engine) {
+	// Swagger documentation
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-	w.Header().Set("Content-Type", "application/json")
-	response := map[string]interface{}{
-		"service": "RPC Test Server",
-		"version": "1.0.0",
-		"endpoints": map[string]string{
-			"POST /test":        "Start a new test",
-			"GET /test/{id}":    "Get test results",
-			"GET /tests":        "List all tests",
-			"DELETE /test/{id}": "Delete a test",
-		},
-		"available_methods": []string{"getAccountInfo", "getMultipleAccounts", "getProgramAccounts"},
-		"timestamp":         time.Now(),
-	}
+	// API routes
+	api := r.Group("/")
+	{
 
-	json.NewEncoder(w).Encode(response)
+		api.GET("/", handleRoot)
+		api.POST("/test", handleTest)
+		api.GET("/tests", handleTests)
+		api.GET("/test/:id", handleTestByID)
+		api.DELETE("/test/:id", handleDeleteTest)
+	}
 }
 
-// handleTest handles POST /test for starting new tests
-func handleTest(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
+// @Summary Get server information
+// @Description Get information about the RPC Test Server
+// @Tags info
+// @Accept json
+// @Produce json
+// @Success 200 {object} APIResponse
+// @Router / [get]
+func handleRoot(c *gin.Context) {
+	response := APIResponse{
+		Success: true,
+		Message: "RPC Test Server is running",
+		Data: map[string]interface{}{
+			"service": "RPC Test Server",
+			"version": "1.0.0",
+			"endpoints": map[string]string{
+				"POST /test":        "Start a new test",
+				"GET /test/{id}":    "Get test results",
+				"GET /tests":        "List all tests",
+				"DELETE /test/{id}": "Delete a test",
+				"GET /swagger/*any": "Swagger documentation",
+			},
+			"available_methods": []string{"getAccountInfo", "getMultipleAccounts", "getProgramAccounts"},
+		},
+		Timestamp: time.Now(),
 	}
 
-	// Parse request
+	c.JSON(http.StatusOK, response)
+}
+
+// @Summary Start a new test
+// @Description Start a new RPC test with the provided configuration
+// @Tags tests
+// @Accept json
+// @Produce json
+// @Param test body TestRequest true "Test configuration"
+// @Success 200 {object} TestResponse
+// @Failure 400 {object} APIResponse
+// @Failure 500 {object} APIResponse
+// @Router /test [post]
+func handleTest(c *gin.Context) {
 	var req TestRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, fmt.Sprintf("Invalid JSON: %v", err), http.StatusBadRequest)
-		return
-	}
-
-	// Validate request
-	if req.TargetRPCURL == "" {
-		http.Error(w, "target_rpc_url is required", http.StatusBadRequest)
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, APIResponse{
+			Success:   false,
+			Message:   fmt.Sprintf("Invalid request: %v", err),
+			Timestamp: time.Now(),
+		})
 		return
 	}
 
@@ -243,23 +301,23 @@ func handleTest(w http.ResponseWriter, r *http.Request) {
 	go runTestAsync(runningTest)
 
 	// Return immediate response
-	w.Header().Set("Content-Type", "application/json")
 	response := TestResponse{
 		Success:   true,
 		Message:   "Test started successfully",
 		TestID:    testID,
 		Timestamp: time.Now(),
 	}
-	json.NewEncoder(w).Encode(response)
+	c.JSON(http.StatusOK, response)
 }
 
-// handleTests handles GET /tests for listing all tests
-func handleTests(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
+// @Summary List all tests
+// @Description Get a list of all tests (running, completed, or failed)
+// @Tags tests
+// @Accept json
+// @Produce json
+// @Success 200 {object} APIResponse
+// @Router /tests [get]
+func handleTests(c *gin.Context) {
 	testManager.mutex.RLock()
 	defer testManager.mutex.RUnlock()
 
@@ -278,69 +336,92 @@ func handleTests(w http.ResponseWriter, r *http.Request) {
 		tests = append(tests, testInfo)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	response := map[string]interface{}{
-		"tests":     tests,
-		"count":     len(tests),
-		"timestamp": time.Now(),
+	response := APIResponse{
+		Success: true,
+		Message: "Tests retrieved successfully",
+		Data: map[string]interface{}{
+			"tests": tests,
+			"count": len(tests),
+		},
+		Timestamp: time.Now(),
 	}
-	json.NewEncoder(w).Encode(response)
+	c.JSON(http.StatusOK, response)
 }
 
-// handleTestByID handles GET and DELETE /test/{id}
-func handleTestByID(w http.ResponseWriter, r *http.Request) {
-	// Extract test ID from URL
-	pathParts := strings.Split(r.URL.Path, "/")
-	if len(pathParts) != 3 {
-		http.NotFound(w, r)
-		return
-	}
-	testID := pathParts[2]
+// @Summary Get test results
+// @Description Get results for a specific test by ID
+// @Tags tests
+// @Accept json
+// @Produce json
+// @Param id path string true "Test ID"
+// @Success 200 {object} TestResponse
+// @Failure 404 {object} APIResponse
+// @Router /test/{id} [get]
+func handleTestByID(c *gin.Context) {
+	testID := c.Param("id")
 
 	testManager.mutex.RLock()
 	test, exists := testManager.tests[testID]
 	testManager.mutex.RUnlock()
 
 	if !exists {
-		http.NotFound(w, r)
+		c.JSON(http.StatusNotFound, APIResponse{
+			Success:   false,
+			Message:   "Test not found",
+			Timestamp: time.Now(),
+		})
 		return
 	}
 
-	switch r.Method {
-	case http.MethodGet:
-		// Return test results
-		w.Header().Set("Content-Type", "application/json")
-		if test.Results != nil {
-			json.NewEncoder(w).Encode(test.Results)
-		} else {
-			// Test still running, return status
-			response := map[string]interface{}{
-				"id":         testID,
-				"status":     test.Status,
-				"start_time": test.StartTime,
-				"config":     test.Config,
-			}
-			json.NewEncoder(w).Encode(response)
-		}
-
-	case http.MethodDelete:
-		// Delete test
-		testManager.mutex.Lock()
-		delete(testManager.tests, testID)
-		testManager.mutex.Unlock()
-
-		w.Header().Set("Content-Type", "application/json")
+	if test.Results != nil {
+		c.JSON(http.StatusOK, test.Results)
+	} else {
+		// Test still running, return status
 		response := map[string]interface{}{
-			"success":   true,
-			"message":   "Test deleted successfully",
-			"test_id":   testID,
-			"timestamp": time.Now(),
+			"id":         testID,
+			"status":     test.Status,
+			"start_time": test.StartTime,
+			"config":     test.Config,
 		}
-		json.NewEncoder(w).Encode(response)
-
-	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		c.JSON(http.StatusOK, response)
 	}
+}
+
+// @Summary Delete a test
+// @Description Delete a specific test by ID
+// @Tags tests
+// @Accept json
+// @Produce json
+// @Param id path string true "Test ID"
+// @Success 200 {object} APIResponse
+// @Failure 404 {object} APIResponse
+// @Router /test/{id} [delete]
+func handleDeleteTest(c *gin.Context) {
+	testID := c.Param("id")
+
+	testManager.mutex.Lock()
+	_, exists := testManager.tests[testID]
+	if exists {
+		delete(testManager.tests, testID)
+	}
+	testManager.mutex.Unlock()
+
+	if !exists {
+		c.JSON(http.StatusNotFound, APIResponse{
+			Success:   false,
+			Message:   "Test not found",
+			Timestamp: time.Now(),
+		})
+		return
+	}
+
+	response := APIResponse{
+		Success:   true,
+		Message:   "Test deleted successfully",
+		Data:      map[string]string{"test_id": testID},
+		Timestamp: time.Now(),
+	}
+	c.JSON(http.StatusOK, response)
 }
 
 // runTestAsync runs a test asynchronously
@@ -644,6 +725,6 @@ func init() {
 	RootCmd.AddCommand(serverCmd)
 
 	// Add server-specific flags
-	serverCmd.Flags().StringVarP(&serverPort, "port", "p", "8080", "Server port")
-	serverCmd.Flags().StringVarP(&serverHost, "host", "h", "localhost", "Server host")
+	serverCmd.Flags().StringVarP(&serverPort, "port", "p", "8081", "Server port")
+	serverCmd.Flags().StringVarP(&serverHost, "host", "s", "localhost", "Server host")
 }

@@ -1,0 +1,256 @@
+basePath: /
+definitions:
+  cmd.APIResponse:
+    properties:
+      data: {}
+      message:
+        type: string
+      success:
+        type: boolean
+      timestamp:
+        type: string
+    type: object
+  cmd.MethodConfig:
+    properties:
+      concurrency:
+        type: integer
+      duration:
+        type: integer
+      enabled:
+        type: boolean
+      limit:
+        type: integer
+    type: object
+  cmd.OverallResult:
+    properties:
+      methodResults:
+        items:
+          $ref: '#/definitions/cmd.TestResult'
+        type: array
+      overallRPS:
+        type: number
+      overallSuccessRate:
+        type: number
+      totalDuration:
+        $ref: '#/definitions/time.Duration'
+      totalFailure:
+        type: integer
+      totalRequests:
+        type: integer
+      totalSuccess:
+        type: integer
+    type: object
+  cmd.TestRequest:
+    properties:
+      global_config:
+        $ref: '#/definitions/cmd.MethodConfig'
+      methods:
+        additionalProperties:
+          $ref: '#/definitions/cmd.MethodConfig'
+        type: object
+      programs:
+        items:
+          type: string
+        type: array
+      rpc_apikey:
+        type: string
+      rpc_url:
+        type: string
+      target_rpc_url:
+        type: string
+    required:
+    - rpc_url
+    - target_rpc_url
+    type: object
+  cmd.TestResponse:
+    properties:
+      duration:
+        $ref: '#/definitions/time.Duration'
+      message:
+        type: string
+      overall:
+        $ref: '#/definitions/cmd.OverallResult'
+      results:
+        items:
+          $ref: '#/definitions/cmd.TestResult'
+        type: array
+      success:
+        type: boolean
+      test_id:
+        type: string
+      timestamp:
+        type: string
+    type: object
+  cmd.TestResult:
+    properties:
+      avgLatency:
+        $ref: '#/definitions/time.Duration'
+      duration:
+        $ref: '#/definitions/time.Duration'
+      failureCount:
+        type: integer
+      maxLatency:
+        $ref: '#/definitions/time.Duration'
+      methodName:
+        type: string
+      minLatency:
+        $ref: '#/definitions/time.Duration'
+      requestsPerSec:
+        type: number
+      successCount:
+        type: integer
+      successRate:
+        type: number
+      totalRequests:
+        type: integer
+    type: object
+  time.Duration:
+    enum:
+    - -9223372036854775808
+    - 9223372036854775807
+    - 1
+    - 1000
+    - 1000000
+    - 1000000000
+    - 60000000000
+    - 3600000000000
+    - -9223372036854775808
+    - 9223372036854775807
+    - 1
+    - 1000
+    - 1000000
+    - 1000000000
+    - 60000000000
+    - 3600000000000
+    type: integer
+    x-enum-varnames:
+    - minDuration
+    - maxDuration
+    - Nanosecond
+    - Microsecond
+    - Millisecond
+    - Second
+    - Minute
+    - Hour
+    - minDuration
+    - maxDuration
+    - Nanosecond
+    - Microsecond
+    - Millisecond
+    - Second
+    - Minute
+    - Hour
+host: localhost:8081
+info:
+  contact: {}
+paths:
+  /:
+    get:
+      consumes:
+      - application/json
+      description: Get information about the RPC Test Server
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd.APIResponse'
+      summary: Get server information
+      tags:
+      - info
+  /test:
+    post:
+      consumes:
+      - application/json
+      description: Start a new RPC test with the provided configuration
+      parameters:
+      - description: Test configuration
+        in: body
+        name: test
+        required: true
+        schema:
+          $ref: '#/definitions/cmd.TestRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd.TestResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/cmd.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/cmd.APIResponse'
+      summary: Start a new test
+      tags:
+      - tests
+  /test/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a specific test by ID
+      parameters:
+      - description: Test ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/cmd.APIResponse'
+      summary: Delete a test
+      tags:
+      - tests
+    get:
+      consumes:
+      - application/json
+      description: Get results for a specific test by ID
+      parameters:
+      - description: Test ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd.TestResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/cmd.APIResponse'
+      summary: Get test results
+      tags:
+      - tests
+  /tests:
+    get:
+      consumes:
+      - application/json
+      description: Get a list of all tests (running, completed, or failed)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cmd.APIResponse'
+      summary: List all tests
+      tags:
+      - tests
+swagger: "2.0"
