@@ -130,6 +130,22 @@ func writeJSONResponse(ctx *fasthttp.RequestCtx, statusCode int, data interface{
 	ctx.Write(jsonData)
 }
 
+// CORS middleware
+func corsMiddleware(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	return func(ctx *fasthttp.RequestCtx) {
+		ctx.Response.Header.Set("Access-Control-Allow-Origin", "*")
+		ctx.Response.Header.Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		ctx.Response.Header.Set("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
+
+		if string(ctx.Method()) == "OPTIONS" {
+			ctx.SetStatusCode(fasthttp.StatusNoContent)
+			return
+		}
+
+		next(ctx)
+	}
+}
+
 func main() {
 	fmt.Println("🚀 Starting RPC Test Server with FastHTTP...")
 	fmt.Printf("📍 Local access: http://localhost:%s\n", serverPort)
@@ -156,7 +172,7 @@ func main() {
 	fmt.Println("   POST /test     - Start a new test")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-	if err := fasthttp.ListenAndServe(addr, r.Handler); err != nil {
+	if err := fasthttp.ListenAndServe(addr, corsMiddleware(r.Handler)); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 }
