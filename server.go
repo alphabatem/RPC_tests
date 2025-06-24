@@ -9,7 +9,6 @@ import (
 	"rpc_test/methods"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/bytedance/sonic"
@@ -74,7 +73,6 @@ type TestConfig struct {
 // TestManager manages running tests
 type TestManager struct {
 	tests map[string]*RunningTest
-	mutex sync.RWMutex
 }
 
 // RunningTest represents a test that's currently running
@@ -217,22 +215,14 @@ func handleTest(ctx *fasthttp.RequestCtx) {
 		}
 	}
 
-	// Generate test ID
-	testID := generateTestID()
-
 	// Create running test
 	runningTest := &RunningTest{
-		ID:        testID,
+		// ID:        testID,
 		Config:    req,
 		Status:    "running",
 		StartTime: time.Now(),
 		Progress:  make(chan TestProgress, 100),
 	}
-
-	// Register test
-	testManager.mutex.Lock()
-	testManager.tests[testID] = runningTest
-	testManager.mutex.Unlock()
 
 	// change to running test and get data
 	response := runTestAsync(runningTest)
@@ -254,7 +244,7 @@ func Method(name string, rpcTest *methods.RPCTest, account ...string) error {
 	}
 }
 
-// runTestAsync runs a test asynchronously
+// runTestAsync runs a test synchronously
 func runTestAsync(test *RunningTest) *TestResponse {
 	defer func() {
 		test.EndTime = time.Now()
@@ -265,8 +255,6 @@ func runTestAsync(test *RunningTest) *TestResponse {
 
 	// Run tests for each enabled method
 	var allResults []TestResult
-	var wg sync.WaitGroup
-	var resultsMutex sync.Mutex
 
 	// Store original global values
 	originalRPCURL := rpcURL
@@ -283,33 +271,27 @@ func runTestAsync(test *RunningTest) *TestResponse {
 		return nil
 	}
 
-	// Run each enabled method
-	for methodName, methodConfig := range test.Config.Methods {
-		if !methodConfig.Enabled {
+	// Run methods in a specific order
+	methodOrder := []string{"getProgramAccounts", "getAccountInfo", "getMultipleAccounts"}
+
+	for _, methodName := range methodOrder {
+		methodConfig, exists := test.Config.Methods[methodName]
+		if !exists || !methodConfig.Enabled {
 			continue
 		}
 
-		wg.Add(1)
-		go func(method string, config MethodConfig) {
-			defer wg.Done()
+		// Set method-specific configuration
+		concurrency = methodConfig.Concurrency
+		duration = methodConfig.Duration
+		limit = methodConfig.Limit
 
-			// Set method-specific configuration
-			concurrency = config.Concurrency
-			duration = config.Duration
-			limit = config.Limit
+		// Run the method test
+		result := runServerMethod(methodName, &test.Config, accounts)
+		allResults = append(allResults, result)
 
-			// Run the method test
-			result := runServerMethod(method, &test.Config, accounts)
-
-			// Store result
-			resultsMutex.Lock()
-			allResults = append(allResults, result)
-			resultsMutex.Unlock()
-		}(methodName, methodConfig)
+		fmt.Printf("Completed %s: %d requests in %v\n",
+			methodName, result.TotalRequests, time.Duration(result.Duration)*time.Microsecond)
 	}
-
-	// Wait for all methods to complete
-	wg.Wait()
 
 	// Restore original values
 	rpcURL = originalRPCURL
@@ -371,84 +353,59 @@ func runServerMethod(methodName string, testConfig *TestRequest, accounts []stri
 	startTime := time.Now()
 	endTime := startTime.Add(time.Duration(methodConfig.Duration) * time.Second)
 
-	var wg sync.WaitGroup
 	var successCount, failureCount int64
-	var mutex sync.Mutex
-
-	// Create channels for workers
-	stop := make(chan struct{})
-
-	// Collect statistics
 	var totalLatency time.Duration
 	var minLatency time.Duration = time.Hour
 	var maxLatency time.Duration
 
-	// Start workers
-	for i := 0; i < methodConfig.Concurrency; i++ {
-		wg.Add(1)
-		go func(workerID int) {
-			defer wg.Done()
+	// Run test synchronously for the duration
+	accountIndex := 0
+	for time.Now().Before(endTime) {
+		// Execute the specified method
+		startReq := time.Now()
+		var err error
 
-			for {
-				select {
-				case <-stop:
-					return
-				default:
-					// Check if test duration has elapsed
-					if time.Now().After(endTime) {
-						return
-					}
-
-					// Execute the specified method
-					startReq := time.Now()
-					var err error
-					if methodName == "getMultipleAccounts" {
-						numAccounts := rand.Intn(10) + 5
-						if len(accounts) < numAccounts {
-							numAccounts = len(accounts)
-						}
-						var batchAccounts []string
-						for i := 0; i < numAccounts; i++ {
-							accountIndex := (workerID + i) % len(accounts)
-							batchAccounts = append(batchAccounts, accounts[accountIndex])
-						}
-						err = Method(methodName, rpcTest, batchAccounts...)
-					} else {
-						err = Method(methodName, rpcTest, accounts[workerID%len(accounts)])
-					}
-					reqDuration := time.Since(startReq)
-
-					mutex.Lock()
-					if err != nil {
-						failureCount++
-					} else {
-						successCount++
-						totalLatency += reqDuration
-						if reqDuration < minLatency {
-							minLatency = reqDuration
-						}
-						if reqDuration > maxLatency {
-							maxLatency = reqDuration
-						}
-					}
-					mutex.Unlock()
-				}
+		if methodName == "getMultipleAccounts" {
+			numAccounts := rand.Intn(10) + 5
+			if len(accounts) < numAccounts {
+				numAccounts = len(accounts)
 			}
-		}(i)
+			var batchAccounts []string
+			for i := 0; i < numAccounts; i++ {
+				idx := (accountIndex + i) % len(accounts)
+				batchAccounts = append(batchAccounts, accounts[idx])
+			}
+			err = Method(methodName, rpcTest, batchAccounts...)
+		} else {
+			err = Method(methodName, rpcTest, accounts[accountIndex%len(accounts)])
+		}
+
+		reqDuration := time.Since(startReq)
+		accountIndex++
+
+		if err != nil {
+			failureCount++
+			fmt.Printf("Error in %s: %v\n", methodName, err)
+		} else {
+			successCount++
+			totalLatency += reqDuration
+			if reqDuration < minLatency {
+				minLatency = reqDuration
+			}
+			if reqDuration > maxLatency {
+				maxLatency = reqDuration
+			}
+		}
 	}
-
-	// Wait for the test duration
-	time.Sleep(time.Duration(methodConfig.Duration) * time.Second)
-	close(stop)
-
-	// Wait for all workers to finish
-	wg.Wait()
 
 	// Calculate results
 	totalDuration := time.Since(startTime)
 	totalRequests := successCount + failureCount
 	requestsPerSecond := float64(totalRequests) / totalDuration.Seconds()
-	successRate := float64(successCount) / float64(totalRequests) * 100
+	successRate := 0.0
+	if totalRequests > 0 {
+		successRate = float64(successCount) / float64(totalRequests) * 100
+	}
 
 	var avgLatency time.Duration
 	if successCount > 0 {
@@ -468,26 +425,6 @@ func runServerMethod(methodName string, testConfig *TestRequest, accounts []stri
 		AvgLatencyMicros: avgLatency.Microseconds(),
 	}
 }
-
-// seedAccountsFromProgram seeds accounts from a program
-// func seedAccountsFromProgram(accountsFile string, config TestConfig) error {
-// 	// Create RPC client for seeding
-// 	rpcTest := methods.NewRPCTest(config.RemoteRPCURL)
-
-// 	// Seed from the first program (or use default)
-// 	programAddress := "2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c"
-// 	if len(config.Programs) > 0 {
-// 		programAddress = config.Programs[0]
-// 	}
-
-// 	// Use a reasonable limit for seeding
-// 	seedLimit := 100
-// 	if limit > 0 {
-// 		seedLimit = limit
-// 	}
-
-// 	return rpcTest.SeedProgramAccounts(programAddress, accountsFile, seedLimit)
-// }
 
 // Load accounts from file
 func loadAccountsFromFile(accountsFile string) ([]string, error) {
