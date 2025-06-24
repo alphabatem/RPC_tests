@@ -5,39 +5,17 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
-	"net/http"
 	"os"
-	"path/filepath"
 	"rpc_test/methods"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	_ "rpc_test/docs"
-
-	"github.com/gin-gonic/gin"
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
+	"github.com/bytedance/sonic"
+	"github.com/fasthttp/router"
+	"github.com/valyala/fasthttp"
 )
-
-// @title RPC Test Server API
-// @version 1.0
-// @description A comprehensive API for testing Solana RPC endpoints with customizable concurrency and account inputs.
-// @termsOfService http://swagger.io/terms/
-
-// @contact.name API Support
-// @contact.url http://www.swagger.io/support
-// @contact.email support@swagger.io
-
-// @license.name Apache 2.0
-// @license.url http://www.apache.org/licenses/LICENSE-2.0.html
-
-// @host localhost:8888
-// @BasePath /
-
-// @securityDefinitions.apikey ApiKeyAuth
-// @in header
-// @name Authorization
 
 // ServerConfig represents the server configuration
 type ServerConfig struct {
@@ -55,12 +33,11 @@ type MethodConfig struct {
 
 // TestRequest represents a test request from the API
 type TestRequest struct {
-	RemoteRPCURL string                  `json:"rpc_url" binding:"required"`
-	RPCAPIKey    string                  `json:"rpc_apikey"`
-	Programs     []string                `json:"programs"`
-	TargetRPCURL string                  `json:"target_rpc_url" binding:"required"`
-	Methods      map[string]MethodConfig `json:"methods"`
-	GlobalConfig MethodConfig            `json:"global_config"`
+	RemoteRPCURL string                  `json:"rpc_url,omitempty"`
+	Programs     []string                `json:"programs,omitempty"`
+	TargetRPCURL string                  `json:"target_rpc_url,omitempty"`
+	Methods      map[string]MethodConfig `json:"methods,omitempty"`
+	GlobalConfig MethodConfig            `json:"global_config,omitempty"`
 }
 
 // TestResponse represents the response from a test
@@ -69,34 +46,22 @@ type TestResponse struct {
 	Message   string        `json:"message"`
 	TestID    string        `json:"test_id,omitempty"`
 	Results   []TestResult  `json:"results,omitempty"`
-	Overall   OverallResult `json:"overall,omitempty"`
 	Timestamp time.Time     `json:"timestamp"`
 	Duration  time.Duration `json:"duration"`
 }
 
 // TestResult represents the result of a single method test
 type TestResult struct {
-	MethodName     string
-	Duration       time.Duration
-	TotalRequests  int64
-	SuccessCount   int64
-	FailureCount   int64
-	RequestsPerSec float64
-	SuccessRate    float64
-	MinLatency     time.Duration
-	MaxLatency     time.Duration
-	AvgLatency     time.Duration
-}
-
-// OverallResult represents overall test results
-type OverallResult struct {
-	TotalDuration      time.Duration
-	TotalRequests      int64
-	TotalSuccess       int64
-	TotalFailure       int64
-	OverallRPS         float64
-	OverallSuccessRate float64
-	MethodResults      []TestResult
+	MethodName       string  `json:"method_name"`
+	Duration         int64   `json:"duration_micros"`
+	TotalRequests    int64   `json:"total_requests"`
+	SuccessCount     int64   `json:"success_count"`
+	FailureCount     int64   `json:"failure_count"`
+	RequestsPerSec   float64 `json:"requests_per_sec"`
+	SuccessRate      float64 `json:"success_rate"`
+	MinLatencyMicros int64   `json:"min_latency_micros"`
+	MaxLatencyMicros int64   `json:"max_latency_micros"`
+	AvgLatencyMicros int64   `json:"avg_latency_micros"`
 }
 
 // TestConfig represents the configuration for seeding
@@ -146,15 +111,30 @@ var (
 	serverHost  = "localhost"
 
 	// Global variables for RPC testing
-	rpcURL      = "https://api.mainnet-beta.solana.com"
+	rpcURL      = "http://localhost:8080"
 	concurrency = 1
-	duration    = 10
-	limit       = 0
+	duration    = 5
+	limit       = 20
 )
 
+// JSON response helper
+func writeJSONResponse(ctx *fasthttp.RequestCtx, statusCode int, data interface{}) {
+	ctx.Response.Header.SetContentType("application/json")
+	ctx.SetStatusCode(statusCode)
+
+	jsonData, err := sonic.Marshal(data)
+	if err != nil {
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		ctx.WriteString(`{"success":false,"message":"JSON marshal error","timestamp":"` + strconv.FormatInt(time.Now().Unix(), 10) + `"}`)
+		return
+	}
+
+	ctx.Write(jsonData)
+}
+
 func main() {
-	fmt.Println("🚀 Starting RPC Test Server with Gin...")
-	fmt.Printf("📍 Server will be available at: http://%s:%s\n", serverHost, serverPort)
+	fmt.Println("🚀 Starting RPC Test Server with FastHTTP...")
+	fmt.Printf("📍 Local access: http://localhost:%s\n", serverPort)
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
 	// Initialize test manager
@@ -162,25 +142,8 @@ func main() {
 		tests: make(map[string]*RunningTest),
 	}
 
-	// Set Gin mode
-	gin.SetMode(gin.ReleaseMode)
-
-	// Create Gin router
-	r := gin.Default()
-
-	// Add CORS middleware
-	r.Use(func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
-
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(204)
-			return
-		}
-
-		c.Next()
-	})
+	// Create router
+	r := router.New()
 
 	// Setup routes
 	setupRoutes(r)
@@ -191,42 +154,23 @@ func main() {
 	fmt.Printf("📡 Listening on: %s\n", addr)
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Println("📋 Available endpoints:")
+	fmt.Println("   GET /          - Server information")
 	fmt.Println("   POST /test     - Start a new test")
-	fmt.Println("   GET /test/{id} - Get test results")
-	fmt.Println("   GET /tests     - List all tests")
-	fmt.Println("   DELETE /test/{id} - Delete a test")
-	fmt.Println("   GET /swagger/*any - Swagger documentation")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-	if err := r.Run(addr); err != nil {
+	if err := fasthttp.ListenAndServe(addr, r.Handler); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 }
 
 // setupRoutes configures all the API routes
-func setupRoutes(r *gin.Engine) {
-	// Swagger documentation
-	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-
+func setupRoutes(r *router.Router) {
 	// API routes
-	api := r.Group("/")
-	{
-		api.GET("/", handleRoot)
-		api.POST("/test", handleTest)
-		api.GET("/tests", handleTests)
-		api.GET("/test/:id", handleTestByID)
-		api.DELETE("/test/:id", handleDeleteTest)
-	}
+	r.GET("/", handleRoot)
+	r.POST("/test", handleTest)
 }
 
-// @Summary Get server information
-// @Description Get information about the RPC Test Server
-// @Tags info
-// @Accept json
-// @Produce json
-// @Success 200 {object} APIResponse
-// @Router / [get]
-func handleRoot(c *gin.Context) {
+func handleRoot(ctx *fasthttp.RequestCtx) {
 	response := APIResponse{
 		Success: true,
 		Message: "RPC Test Server is running",
@@ -234,85 +178,42 @@ func handleRoot(c *gin.Context) {
 			"service": "RPC Test Server",
 			"version": "1.0.0",
 			"endpoints": map[string]string{
-				"POST /test":        "Start a new test",
-				"GET /test/{id}":    "Get test results",
-				"GET /tests":        "List all tests",
-				"DELETE /test/{id}": "Delete a test",
-				"GET /swagger/*any": "Swagger documentation",
+				"GET /":      "Server information",
+				"POST /test": "Start a new test",
 			},
 			"available_methods": []string{"getAccountInfo", "getMultipleAccounts", "getProgramAccounts"},
 		},
 		Timestamp: time.Now(),
 	}
 
-	c.JSON(http.StatusOK, response)
+	writeJSONResponse(ctx, fasthttp.StatusOK, response)
 }
 
-// @Summary Start a new test
-// @Description Start a new RPC test with the provided configuration
-// @Tags tests
-// @Accept json
-// @Produce json
-// @Param test body TestRequest true "Test configuration"
-// @Success 200 {object} TestResponse
-// @Failure 400 {object} APIResponse
-// @Failure 500 {object} APIResponse
-// @Router /test [post]
-func handleTest(c *gin.Context) {
+func handleTest(ctx *fasthttp.RequestCtx) {
 	var req TestRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, APIResponse{
-			Success:   false,
-			Message:   fmt.Sprintf("Invalid request: %v", err),
-			Timestamp: time.Now(),
-		})
-		return
-	}
-
-	// Set defaults
-	if len(req.Programs) == 0 {
-		req.Programs = []string{"2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c"}
-	}
-
-	// Initialize methods if not provided
-	if req.Methods == nil {
-		req.Methods = make(map[string]MethodConfig)
-	}
-
-	// Set default global config
-	if req.GlobalConfig.Concurrency == 0 {
-		req.GlobalConfig.Concurrency = 5
-	}
-	if req.GlobalConfig.Duration == 0 {
-		req.GlobalConfig.Duration = 15
-	}
-
-	// Set defaults for each method if not specified
-	availableMethods := []string{"getAccountInfo", "getMultipleAccounts", "getProgramAccounts"}
-	for _, method := range availableMethods {
-		if config, exists := req.Methods[method]; exists {
-			// Use global defaults if method config is incomplete
-			if config.Concurrency == 0 {
-				config.Concurrency = req.GlobalConfig.Concurrency
-			}
-			if config.Duration == 0 {
-				config.Duration = req.GlobalConfig.Duration
-			}
-			if config.Limit == 0 {
-				config.Limit = req.GlobalConfig.Limit
-			}
-			if !config.Enabled {
-				config.Enabled = true // Default to enabled
-			}
-			req.Methods[method] = config
-		} else {
-			// Create default config for method
-			req.Methods[method] = MethodConfig{
-				Concurrency: req.GlobalConfig.Concurrency,
-				Duration:    req.GlobalConfig.Duration,
-				Limit:       req.GlobalConfig.Limit,
+	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
+		req = TestRequest{
+			RemoteRPCURL: rpcURL,
+			TargetRPCURL: rpcURL,
+			Programs:     []string{"2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c"},
+			Methods:      make(map[string]MethodConfig),
+			GlobalConfig: MethodConfig{
+				Concurrency: concurrency,
+				Duration:    duration,
+				Limit:       limit,
 				Enabled:     true,
-			}
+			},
+		}
+	}
+
+	fmt.Println("req", req)
+	// Set defaults for each method if not specified
+	for _, method := range []string{"getAccountInfo", "getMultipleAccounts", "getProgramAccounts"} {
+		req.Methods[method] = MethodConfig{
+			Concurrency: req.GlobalConfig.Concurrency,
+			Duration:    req.GlobalConfig.Duration,
+			Limit:       req.GlobalConfig.Limit,
+			Enabled:     true,
 		}
 	}
 
@@ -333,131 +234,10 @@ func handleTest(c *gin.Context) {
 	testManager.tests[testID] = runningTest
 	testManager.mutex.Unlock()
 
-	// Start test in background
-	go runTestAsync(runningTest)
+	// change to running test and get data
+	response := runTestAsync(runningTest)
 
-	// Return immediate response
-	response := TestResponse{
-		Success:   true,
-		Message:   "Test started successfully",
-		TestID:    testID,
-		Timestamp: time.Now(),
-	}
-	c.JSON(http.StatusOK, response)
-}
-
-// @Summary List all tests
-// @Description Get a list of all tests (running, completed, or failed)
-// @Tags tests
-// @Accept json
-// @Produce json
-// @Success 200 {object} APIResponse
-// @Router /tests [get]
-func handleTests(c *gin.Context) {
-	testManager.mutex.RLock()
-	defer testManager.mutex.RUnlock()
-
-	tests := make([]map[string]interface{}, 0)
-	for id, test := range testManager.tests {
-		testInfo := map[string]interface{}{
-			"id":         id,
-			"status":     test.Status,
-			"start_time": test.StartTime,
-			"end_time":   test.EndTime,
-			"config":     test.Config,
-		}
-		if test.Results != nil {
-			testInfo["duration"] = test.Results.Duration
-		}
-		tests = append(tests, testInfo)
-	}
-
-	response := APIResponse{
-		Success: true,
-		Message: "Tests retrieved successfully",
-		Data: map[string]interface{}{
-			"tests": tests,
-			"count": len(tests),
-		},
-		Timestamp: time.Now(),
-	}
-	c.JSON(http.StatusOK, response)
-}
-
-// @Summary Get test results
-// @Description Get results for a specific test by ID
-// @Tags tests
-// @Accept json
-// @Produce json
-// @Param id path string true "Test ID"
-// @Success 200 {object} TestResponse
-// @Failure 404 {object} APIResponse
-// @Router /test/{id} [get]
-func handleTestByID(c *gin.Context) {
-	testID := c.Param("id")
-
-	testManager.mutex.RLock()
-	test, exists := testManager.tests[testID]
-	testManager.mutex.RUnlock()
-
-	if !exists {
-		c.JSON(http.StatusNotFound, APIResponse{
-			Success:   false,
-			Message:   "Test not found",
-			Timestamp: time.Now(),
-		})
-		return
-	}
-
-	if test.Results != nil {
-		c.JSON(http.StatusOK, test.Results)
-	} else {
-		// Test still running, return status
-		response := map[string]interface{}{
-			"id":         testID,
-			"status":     test.Status,
-			"start_time": test.StartTime,
-			"config":     test.Config,
-		}
-		c.JSON(http.StatusOK, response)
-	}
-}
-
-// @Summary Delete a test
-// @Description Delete a specific test by ID
-// @Tags tests
-// @Accept json
-// @Produce json
-// @Param id path string true "Test ID"
-// @Success 200 {object} APIResponse
-// @Failure 404 {object} APIResponse
-// @Router /test/{id} [delete]
-func handleDeleteTest(c *gin.Context) {
-	testID := c.Param("id")
-
-	testManager.mutex.Lock()
-	_, exists := testManager.tests[testID]
-	if exists {
-		delete(testManager.tests, testID)
-	}
-	testManager.mutex.Unlock()
-
-	if !exists {
-		c.JSON(http.StatusNotFound, APIResponse{
-			Success:   false,
-			Message:   "Test not found",
-			Timestamp: time.Now(),
-		})
-		return
-	}
-
-	response := APIResponse{
-		Success:   true,
-		Message:   "Test deleted successfully",
-		Data:      map[string]string{"test_id": testID},
-		Timestamp: time.Now(),
-	}
-	c.JSON(http.StatusOK, response)
+	writeJSONResponse(ctx, fasthttp.StatusOK, response)
 }
 
 // Method executes a specific RPC method
@@ -475,69 +255,13 @@ func Method(name string, rpcTest *methods.RPCTest, account ...string) error {
 }
 
 // runTestAsync runs a test asynchronously
-func runTestAsync(test *RunningTest) {
+func runTestAsync(test *RunningTest) *TestResponse {
 	defer func() {
 		test.EndTime = time.Now()
 		if test.Results != nil {
 			test.Results.Duration = test.EndTime.Sub(test.StartTime)
 		}
 	}()
-
-	// Create temporary config file
-	configFile := fmt.Sprintf("./data/server_config_%s.json", test.ID)
-	if err := os.MkdirAll(filepath.Dir(configFile), 0755); err != nil {
-		test.Status = "failed"
-		test.Results = &TestResponse{
-			Success:   false,
-			Message:   fmt.Sprintf("Failed to create config directory: %v", err),
-			TestID:    test.ID,
-			Timestamp: time.Now(),
-		}
-		return
-	}
-
-	// Generate config
-	config := TestConfig{
-		RemoteRPCURL: test.Config.RemoteRPCURL,
-		RPCAPIKey:    test.Config.RPCAPIKey,
-		Programs:     test.Config.Programs,
-	}
-
-	configJSON, err := json.MarshalIndent(config, "", "  ")
-	if err != nil {
-		test.Status = "failed"
-		test.Results = &TestResponse{
-			Success:   false,
-			Message:   fmt.Sprintf("Failed to marshal config: %v", err),
-			TestID:    test.ID,
-			Timestamp: time.Now(),
-		}
-		return
-	}
-
-	if err := os.WriteFile(configFile, configJSON, 0644); err != nil {
-		test.Status = "failed"
-		test.Results = &TestResponse{
-			Success:   false,
-			Message:   fmt.Sprintf("Failed to write config file: %v", err),
-			TestID:    test.ID,
-			Timestamp: time.Now(),
-		}
-		return
-	}
-
-	// Seed accounts
-	accountsFile := fmt.Sprintf("./data/server_accounts_%s.txt", test.ID)
-	if err := seedAccountsFromProgram(accountsFile, config); err != nil {
-		test.Status = "failed"
-		test.Results = &TestResponse{
-			Success:   false,
-			Message:   fmt.Sprintf("Failed to seed accounts: %v", err),
-			TestID:    test.ID,
-			Timestamp: time.Now(),
-		}
-		return
-	}
 
 	// Run tests for each enabled method
 	var allResults []TestResult
@@ -552,6 +276,12 @@ func runTestAsync(test *RunningTest) {
 
 	// Set target RPC URL
 	rpcURL = test.Config.TargetRPCURL
+
+	accounts, err := loadAccountsFromFile("./data/test_accounts.txt")
+	if err != nil {
+		fmt.Println("Error loading accounts:", err)
+		return nil
+	}
 
 	// Run each enabled method
 	for methodName, methodConfig := range test.Config.Methods {
@@ -569,7 +299,7 @@ func runTestAsync(test *RunningTest) {
 			limit = config.Limit
 
 			// Run the method test
-			result := runServerMethod(method, accountsFile, &test.Config)
+			result := runServerMethod(method, &test.Config, accounts)
 
 			// Store result
 			resultsMutex.Lock()
@@ -596,11 +326,8 @@ func runTestAsync(test *RunningTest) {
 			TestID:    test.ID,
 			Timestamp: time.Now(),
 		}
-		return
+		return test.Results
 	}
-
-	// Calculate overall results
-	overall := calculateOverallResults(allResults)
 
 	test.Status = "completed"
 	test.Results = &TestResponse{
@@ -608,49 +335,25 @@ func runTestAsync(test *RunningTest) {
 		Message:   "Test completed successfully",
 		TestID:    test.ID,
 		Results:   allResults,
-		Overall:   overall,
 		Timestamp: time.Now(),
 	}
-
-	// Cleanup temporary files
-	os.Remove(configFile)
-	os.Remove(accountsFile)
+	return test.Results
 }
 
 // runServerMethod runs a single method test with the given configuration
-func runServerMethod(methodName string, accountsFile string, testConfig *TestRequest) TestResult {
-	// Load accounts from file
-	data, err := os.ReadFile(accountsFile)
-	if err != nil {
-		return TestResult{
-			MethodName:     methodName,
-			Duration:       0,
-			TotalRequests:  0,
-			SuccessCount:   0,
-			FailureCount:   1,
-			RequestsPerSec: 0,
-			SuccessRate:    0,
-		}
-	}
-
-	lines := strings.Split(string(data), "\n")
-	var accounts []string
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			accounts = append(accounts, line)
-		}
-	}
-
+func runServerMethod(methodName string, testConfig *TestRequest, accounts []string) TestResult {
 	if len(accounts) == 0 {
 		return TestResult{
-			MethodName:     methodName,
-			Duration:       0,
-			TotalRequests:  0,
-			SuccessCount:   0,
-			FailureCount:   1,
-			RequestsPerSec: 0,
-			SuccessRate:    0,
+			MethodName:       methodName,
+			Duration:         0,
+			TotalRequests:    0,
+			SuccessCount:     0,
+			FailureCount:     1,
+			RequestsPerSec:   0,
+			SuccessRate:      0,
+			MinLatencyMicros: 0,
+			MaxLatencyMicros: 0,
+			AvgLatencyMicros: 0,
 		}
 	}
 
@@ -753,63 +456,54 @@ func runServerMethod(methodName string, accountsFile string, testConfig *TestReq
 	}
 
 	return TestResult{
-		MethodName:     methodName,
-		Duration:       totalDuration,
-		TotalRequests:  totalRequests,
-		SuccessCount:   successCount,
-		FailureCount:   failureCount,
-		RequestsPerSec: requestsPerSecond,
-		SuccessRate:    successRate,
-		MinLatency:     minLatency,
-		MaxLatency:     maxLatency,
-		AvgLatency:     avgLatency,
+		MethodName:       methodName,
+		Duration:         totalDuration.Microseconds(),
+		TotalRequests:    totalRequests,
+		SuccessCount:     successCount,
+		FailureCount:     failureCount,
+		RequestsPerSec:   requestsPerSecond,
+		SuccessRate:      successRate,
+		MinLatencyMicros: minLatency.Microseconds(),
+		MaxLatencyMicros: maxLatency.Microseconds(),
+		AvgLatencyMicros: avgLatency.Microseconds(),
 	}
 }
 
 // seedAccountsFromProgram seeds accounts from a program
-func seedAccountsFromProgram(accountsFile string, config TestConfig) error {
-	// Create RPC client for seeding
-	rpcTest := methods.NewRPCTest(config.RemoteRPCURL)
+// func seedAccountsFromProgram(accountsFile string, config TestConfig) error {
+// 	// Create RPC client for seeding
+// 	rpcTest := methods.NewRPCTest(config.RemoteRPCURL)
 
-	// Seed from the first program (or use default)
-	programAddress := "2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c"
-	if len(config.Programs) > 0 {
-		programAddress = config.Programs[0]
+// 	// Seed from the first program (or use default)
+// 	programAddress := "2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c"
+// 	if len(config.Programs) > 0 {
+// 		programAddress = config.Programs[0]
+// 	}
+
+// 	// Use a reasonable limit for seeding
+// 	seedLimit := 100
+// 	if limit > 0 {
+// 		seedLimit = limit
+// 	}
+
+// 	return rpcTest.SeedProgramAccounts(programAddress, accountsFile, seedLimit)
+// }
+
+// Load accounts from file
+func loadAccountsFromFile(accountsFile string) ([]string, error) {
+	data, err := os.ReadFile(accountsFile)
+	if err != nil {
+		return nil, err
 	}
-
-	// Use a reasonable limit for seeding
-	seedLimit := 100
-	if limit > 0 {
-		seedLimit = limit
+	lines := strings.Split(string(data), "\n")
+	var accounts []string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			accounts = append(accounts, line)
+		}
 	}
-
-	return rpcTest.SeedProgramAccounts(programAddress, accountsFile, seedLimit)
-}
-
-// calculateOverallResults calculates overall statistics
-func calculateOverallResults(methodResults []TestResult) OverallResult {
-	var totalDuration time.Duration
-	var totalRequests, totalSuccess, totalFailure int64
-
-	for _, result := range methodResults {
-		totalDuration += result.Duration
-		totalRequests += result.TotalRequests
-		totalSuccess += result.SuccessCount
-		totalFailure += result.FailureCount
-	}
-
-	overallRPS := float64(totalRequests) / totalDuration.Seconds()
-	overallSuccessRate := float64(totalSuccess) / float64(totalRequests) * 100
-
-	return OverallResult{
-		TotalDuration:      totalDuration,
-		TotalRequests:      totalRequests,
-		TotalSuccess:       totalSuccess,
-		TotalFailure:       totalFailure,
-		OverallRPS:         overallRPS,
-		OverallSuccessRate: overallSuccessRate,
-		MethodResults:      methodResults,
-	}
+	return accounts, nil
 }
 
 // generateTestID generates a unique test ID
