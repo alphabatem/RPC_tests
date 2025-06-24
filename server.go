@@ -204,7 +204,6 @@ func handleTest(ctx *fasthttp.RequestCtx) {
 		}
 	}
 
-	fmt.Println("req", req)
 	// Set defaults for each method if not specified
 	for _, method := range []string{"getAccountInfo", "getMultipleAccounts", "getProgramAccounts"} {
 		req.Methods[method] = MethodConfig{
@@ -376,6 +375,8 @@ func runServerMethod(methodName string, testConfig *TestRequest, accounts []stri
 				batchAccounts = append(batchAccounts, accounts[idx])
 			}
 			err = Method(methodName, rpcTest, batchAccounts...)
+		} else if methodName == "getProgramAccounts" {
+			err = Method(methodName, rpcTest, testConfig.Programs...)
 		} else {
 			err = Method(methodName, rpcTest, accounts[accountIndex%len(accounts)])
 		}
