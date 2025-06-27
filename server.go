@@ -112,7 +112,7 @@ var (
 	rpcURL      = "http://localhost:8080"
 	concurrency = 1
 	duration    = 5
-	limit       = 20
+	limit       = 50
 )
 
 // JSON response helper
