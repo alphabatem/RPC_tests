@@ -280,7 +280,7 @@ func runTestAsync(test *RunningTest) *TestResponse {
 	// Set target RPC URL
 	rpcURL = test.Config.TargetRPCURL
 
-	accounts, err := loadAccountsFromFile("./data/test_accounts.txt")
+	accounts, err := loadAccountsFromFile("./data/test_accounts.txt", test.Config)
 	if err != nil {
 		fmt.Println("Error loading accounts:", err)
 		return nil
@@ -444,10 +444,20 @@ func runServerMethod(methodName string, testConfig *TestRequest, accounts []stri
 }
 
 // Load accounts from file
-func loadAccountsFromFile(accountsFile string) ([]string, error) {
+func loadAccountsFromFile(accountsFile string, testConfig TestRequest) ([]string, error) {
 	data, err := os.ReadFile(accountsFile)
-	if err != nil {
-		return nil, err
+	if err != nil || len(data) == 0 {
+		err = seedAccountsFromProgram(accountsFile, TestConfig{
+			RemoteRPCURL: rpcURL,
+			Programs:     testConfig.Programs,
+		})
+		if err != nil {
+			return nil, err
+		}
+		data, err = os.ReadFile(accountsFile)
+		if err != nil {
+			return nil, err
+		}
 	}
 	lines := strings.Split(string(data), "\n")
 	var accounts []string
@@ -458,6 +468,26 @@ func loadAccountsFromFile(accountsFile string) ([]string, error) {
 		}
 	}
 	return accounts, nil
+}
+
+// seedAccountsFromProgram seeds accounts from a program
+func seedAccountsFromProgram(accountsFile string, config TestConfig) error {
+	// Create RPC client for seeding
+	rpcTest := methods.NewRPCTest(config.RemoteRPCURL)
+
+	// Seed from the first program (or use default)
+	programAddress := "2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c"
+	if len(config.Programs) > 0 {
+		programAddress = config.Programs[0]
+	}
+
+	// Use a reasonable limit for seeding
+	seedLimit := 100
+	if limit > 0 {
+		seedLimit = limit
+	}
+
+	return rpcTest.SeedProgramAccounts(programAddress, accountsFile, seedLimit)
 }
 
 // generateTestID generates a unique test ID
