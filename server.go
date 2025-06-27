@@ -253,7 +253,6 @@ func handleTest(ctx *fasthttp.RequestCtx) {
 
 	// Create running test
 	runningTest := &RunningTest{
-		// ID:        testID,
 		Config:    req,
 		Status:    "running",
 		StartTime: time.Now(),
@@ -302,10 +301,8 @@ func runTestAsync(test *RunningTest) *TestResponse {
 	rpcURL = test.Config.TargetRPCURL
 	var accounts []string
 	var err error
-	if test.Config.Programs[0] != "2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c" {
-		accounts, err = loadAccountsFromFile("./data/test_accounts.txt", test.Config)
-	}
 
+	accounts, err = loadAccountsFromFile("./data/test_accounts.txt", test.Config)
 	if err != nil {
 		fmt.Println("Error loading accounts:", err)
 		test.Status = "failed"
@@ -478,13 +475,16 @@ func runServerMethod(methodName string, testConfig *TestRequest, accounts []stri
 // Load accounts from file
 func loadAccountsFromFile(accountsFile string, testConfig TestRequest) ([]string, error) {
 	if testConfig.Programs[0] != "2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c" {
-		err := seedAccountsFromProgram(accountsFile, TestConfig{
+		newFile := fmt.Sprintf("./data/test_accounts_%s.txt", testConfig.Programs[0])
+		defer os.Remove(newFile)
+		err := seedAccountsFromProgram(newFile, TestConfig{
 			RemoteRPCURL: rpcURL,
 			Programs:     testConfig.Programs,
 		})
 		if err != nil {
 			return nil, err
 		}
+		accountsFile = newFile
 	}
 
 	data, err := os.ReadFile(accountsFile)
