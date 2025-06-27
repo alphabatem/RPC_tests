@@ -30,6 +30,10 @@ type MethodConfig struct {
 	Enabled     bool `json:"enabled"`
 }
 
+type TestRequestSimple struct {
+	Programs []string `json:"programs,omitempty"`
+}
+
 // TestRequest represents a test request from the API
 type TestRequest struct {
 	RemoteRPCURL string                  `json:"rpc_url,omitempty"`
@@ -204,13 +208,13 @@ func handleRoot(ctx *fasthttp.RequestCtx) {
 }
 
 func handleTest(ctx *fasthttp.RequestCtx) {
+	var reqBody TestRequestSimple
 	var req TestRequest
-	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
+	if err := json.Unmarshal(ctx.PostBody(), &reqBody); err != nil {
 		req = TestRequest{
 			RemoteRPCURL: rpcURL,
 			TargetRPCURL: rpcURL,
 			Programs:     []string{"2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c"},
-			Methods:      make(map[string]MethodConfig),
 			GlobalConfig: MethodConfig{
 				Concurrency: concurrency,
 				Duration:    duration,
@@ -218,6 +222,23 @@ func handleTest(ctx *fasthttp.RequestCtx) {
 				Enabled:     true,
 			},
 		}
+	} else {
+		req = TestRequest{
+			RemoteRPCURL: rpcURL,
+			TargetRPCURL: rpcURL,
+			Programs:     reqBody.Programs,
+			GlobalConfig: MethodConfig{
+				Concurrency: concurrency,
+				Duration:    duration,
+				Limit:       limit,
+				Enabled:     true,
+			},
+		}
+	}
+
+	fmt.Println(req)
+	if req.Methods == nil {
+		req.Methods = make(map[string]MethodConfig)
 	}
 
 	// Set defaults for each method if not specified
@@ -279,11 +300,22 @@ func runTestAsync(test *RunningTest) *TestResponse {
 
 	// Set target RPC URL
 	rpcURL = test.Config.TargetRPCURL
+	var accounts []string
+	var err error
+	if test.Config.Programs[0] != "2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c" {
+		accounts, err = loadAccountsFromFile("./data/test_accounts.txt", test.Config)
+	}
 
-	accounts, err := loadAccountsFromFile("./data/test_accounts.txt", test.Config)
 	if err != nil {
 		fmt.Println("Error loading accounts:", err)
-		return nil
+		test.Status = "failed"
+		test.Results = &TestResponse{
+			Success:   false,
+			Message:   fmt.Sprintf("Failed to load accounts: %v", err),
+			TestID:    test.ID,
+			Timestamp: time.Now(),
+		}
+		return test.Results
 	}
 
 	// Run methods in a specific order
@@ -445,20 +477,21 @@ func runServerMethod(methodName string, testConfig *TestRequest, accounts []stri
 
 // Load accounts from file
 func loadAccountsFromFile(accountsFile string, testConfig TestRequest) ([]string, error) {
-	data, err := os.ReadFile(accountsFile)
-	if err != nil || len(data) == 0 {
-		err = seedAccountsFromProgram(accountsFile, TestConfig{
+	if testConfig.Programs[0] != "2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c" {
+		err := seedAccountsFromProgram(accountsFile, TestConfig{
 			RemoteRPCURL: rpcURL,
 			Programs:     testConfig.Programs,
 		})
 		if err != nil {
 			return nil, err
 		}
-		data, err = os.ReadFile(accountsFile)
-		if err != nil {
-			return nil, err
-		}
 	}
+
+	data, err := os.ReadFile(accountsFile)
+	if err != nil || len(data) == 0 {
+		return nil, err
+	}
+
 	lines := strings.Split(string(data), "\n")
 	var accounts []string
 	for _, line := range lines {
