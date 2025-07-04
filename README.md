@@ -5,7 +5,6 @@ A CLI tool for stress testing and benchmarking Solana RPC endpoints with customi
 ## Features
 
 - **Comprehensive Test Suite**: Run all RPC methods simultaneously with the `runall` command
-- **Dual RPC Architecture**: Use remote RPC for seeding accounts and target RPC for testing
 - **Dynamic Configuration**: Generate and load test configurations with API keys
 - **Smart Progress Tracking**: Real-time progress bars and detailed statistics
 - **Dynamic Latency Display**: Automatic unit selection (μs, ms, s) based on performance
@@ -14,7 +13,6 @@ A CLI tool for stress testing and benchmarking Solana RPC endpoints with customi
 - **Specify test duration**
 - **Provide accounts/programs** individually or from a file
 - **Seed account addresses** from programs for testing purposes
-- **Test against both public and local RPC endpoints**
 - **Comprehensive performance metrics** (requests/second, latency statistics)
 - **Limit the number of accounts/programs** to process
 
@@ -43,8 +41,8 @@ The `runall` command provides a complete testing workflow:
 
 **What `runall` does:**
 1. **Generates test configuration** with your API key
-2. **Seeds 100 accounts** from the specified program using remote RPC
-3. **Runs all RPC methods** concurrently against your target RPC
+2. **Seeds 100 accounts** from the specified program using remote RPC and gPA
+3. **Runs all RPC methods** concurrently against your target RPC, using seeded accounts as needed
 4. **Provides comprehensive statistics** with dynamic latency display
 
 ## Usage
@@ -95,12 +93,12 @@ The `runall` command provides a complete testing workflow:
 
 ### Available Commands
 
-- `runall`: **NEW** - Execute comprehensive test suite with all methods
-- `getAccountInfo`: Run tests against the getAccountInfo RPC method
-- `getMultipleAccounts`: Run tests against the getMultipleAccounts RPC method
-- `getProgramAccounts`: Run tests against the getProgramAccounts RPC method
+- `runall`: Execute comprehensive test suite with all methods
+- `getAccountInfo`: Run tests using only the getAccountInfo RPC method
+- `getMultipleAccounts`: Run tests using only the getMultipleAccounts RPC method
+- `getProgramAccounts`: Run tests using only the getProgramAccounts RPC method
 - `seed`: Fetch program accounts and save their addresses to a file for testing purposes
-- `localRpc`: Run tests against a local RPC endpoint running on localhost:8080
+- `localRpc`: Run tests against a local RPC endpoint (e.g. lantern) running on localhost:8080 
 
 ### Global Flags (applicable to all commands)
 
@@ -122,28 +120,28 @@ The `runall` command provides a complete testing workflow:
 
 #### getAccountInfo
 
-- `-a, --account`: Account addresses to use in tests (can be specified multiple times)
-- `-f, --account-file`: File containing account addresses (one per line)
+- `-a, --account`: Accounts to use in tests (accepts multiple accounts, will rotate between them)
+- `-f, --account-file`: File containing accounts (one per line, requests sent will rotate between them)
 
 #### getMultipleAccounts
 
-- `-a, --account`: Account addresses to use in tests (can be specified multiple times or comma-separated)
-- `-f, --account-file`: File containing account addresses (one per line)
+- `-a, --account`: Accounts to use in tests (will rotate between specified accounts in blocks of 5-15, randomly selected)
+- `-f, --account-file`: File containing accounts (one per line, will rotate between them)
 
 #### getProgramAccounts
 
-- `-p, --program`: Program addresses to use in tests (can be specified multiple times)
-- `-f, --program-file`: File containing program addresses (one per line)
+- `-p, --program`: Program accounts to use in tests (can specify more than one)
+- `-f, --program-file`: File containing program accounts (one per line)
 
 #### seed
 
-- `-p, --program`: Program addresses to fetch accounts for (can be specified multiple times)
-- `-f, --program-file`: File containing program addresses (one per line)
-- `-o, --output`: Output file to store account addresses (default: "accounts.txt")
+- `-p, --program`: Program accounts to fetch accounts from (can specify multiple programs)
+- `-f, --program-file`: File containing program accounts (one per line)
+- `-o, --output`: Output file to store program accounts for future tests (default: "accounts.txt")
 
 ## Dual RPC Architecture
 
-The `runall` command uses a dual RPC architecture for optimal performance:
+The `runall` command uses a uses two RPCs. This lets you get program accounts from one RPC (the "remote" RPC), then use those to build tests against another (the "target"). This is mainly useful in testing Lantern, by setting Lantern as the target RPC.
 
 ### Remote RPC (Config)
 - **Purpose**: Seeding account data from programs
@@ -172,9 +170,9 @@ This separation allows you to:
 ### Program File (for getProgramAccounts and seed)
 
 ```
-TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
-ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL
-ComputeBudget111111111111111111111111111111
+2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c
+FLUXubRmkEi2q6K3Y9kBPg9248ggaZVsoSFhtJHSrm1X
+whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc
 ```
 
 ### Generated Config File (runall command)
@@ -304,10 +302,6 @@ The test suite reports the following metrics:
 ## Use Cases
 
 - **Compare performance** between different Solana RPC providers
-- **Optimize application settings** for RPC requests
-- **Identify performance bottlenecks** in RPC interactions
-- **Test the stability** of RPC endpoints under load
-- **Benchmark local Solana validator nodes**
-- **Comprehensive RPC evaluation** with the `runall` command
-- **API key management** for premium RPC services
-- **Dual RPC testing** (remote for data, target for performance) 
+- **Optimize application settings** when using Lantern
+- **Identify performance bottlenecks** when using Lantern
+- **Test the stability** of Lantern or RPC endpoints under load
