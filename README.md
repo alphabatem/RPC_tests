@@ -198,7 +198,7 @@ The `runall` command uses a uses two RPCs. This lets you get program accounts fr
 
 ### Global Flags (applicable to all commands)
 
-- `-u, --url`: RPC endpoint URL (default: "https://api.mainnet-beta.solana.com")
+- `-u, --url`: RPC endpoint URL (default: "http://localhost:8080" e.g. for Lantern)
 - `-c, --concurrency`: Number of concurrent requests (default: 1)
 - `-d, --duration`: Test duration in seconds (default: 10)
 - `-l, --limit`: Limit the number of accounts/programs to process (0 for no limit)
