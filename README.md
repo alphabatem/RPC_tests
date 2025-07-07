@@ -74,8 +74,8 @@ The `runall` command provides a complete testing workflow:
 
 **What `runall` does:**
 1. **Generates test configuration** with your API key
-2. **Seeds 100 accounts** from the specified program using remote RPC
-3. **Runs all RPC methods** concurrently against your target RPC
+2. **Seeds 100 accounts** from the specified program using remote RPC and gPA
+3. **Runs all RPC methods** concurrently against your target RPC, using seeded accounts as needed
 4. **Provides comprehensive statistics** with dynamic latency display
 
 ## 📁 Project Structure
@@ -194,7 +194,7 @@ The `runall` command uses a uses two RPCs. This lets you get program accounts fr
 - `getMultipleAccounts`: Run tests against the getMultipleAccounts RPC method
 - `getProgramAccounts`: Run tests against the getProgramAccounts RPC method
 - `seed`: Fetch program accounts and save their addresses to a file for testing purposes
-- `localRpc`: Run tests against a local RPC endpoint running on localhost:8080
+- `localRpc`: Run tests against a local RPC endpoint (e.g. lantern) running on localhost:8080 
 
 ### Global Flags (applicable to all commands)
 
@@ -235,11 +235,30 @@ The `runall` command uses a uses two RPCs. This lets you get program accounts fr
 - `-f, --program-file`: File containing program accounts (one per line)
 - `-o, --output`: Output file to store program accounts for future tests (default: "accounts.txt")
 
+
 ## ⚙️ Configuration
 
 ### Configuration File Structure
 
 The application generates a `config.json` file with the following structure:
+
+### Account File (for getAccountInfo and getMultipleAccounts)
+
+```
+9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin
+6ycRTkj1RM3L4sZcKHk8HULaFvEBaLGAiQpVpC9MPcKm
+7Np41oeYqPefeNQEHSv1UDhYrehxin3NStELsSKCT4K2
+```
+
+### Program File (for getProgramAccounts and seed)
+
+```
+2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c
+FLUXubRmkEi2q6K3Y9kBPg9248ggaZVsoSFhtJHSrm1X
+whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc
+```
+
+### Generated Config File (runall command)
 
 ```json
 {
