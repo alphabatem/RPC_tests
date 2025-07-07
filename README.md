@@ -34,6 +34,21 @@ A comprehensive CLI tool for stress testing and benchmarking Solana RPC endpoint
 - Go 1.24.2 or higher
 - Git
 
+### Run the Benchmark Server 
+This will ru na local server that the [Lantern configuration tool](https://configurator.fluxrpc.com/) can connect to and use.
+
+```bash
+# Clone the repository
+git clone https://github.com/alphabatem/RPC_tests
+cd rpc_test
+
+# Install Prerequisites
+go mod tidy
+
+# Build the application
+go run server.go
+```
+
 ### Build from Source
 
 ```bash
