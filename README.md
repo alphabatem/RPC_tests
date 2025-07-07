@@ -35,7 +35,7 @@ A comprehensive CLI tool for stress testing and benchmarking Solana RPC endpoint
 - Git
 
 ### Run the Benchmark Server 
-This will ru na local server that the [Lantern configuration tool](https://configurator.fluxrpc.com/) can connect to and use.
+This will run a local server that the [Lantern configuration tool](https://configurator.fluxrpc.com/) can connect to and use.
 
 ```bash
 # Clone the repository
