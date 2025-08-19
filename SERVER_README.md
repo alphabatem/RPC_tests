@@ -5,12 +5,11 @@ The RPC Test Server provides an HTTP API for running Solana RPC endpoint tests p
 ## Features
 
 - **HTTP API**: RESTful endpoints for test management
-- **Asynchronous Testing**: Tests run in the background, allowing non-blocking API calls
-- **Method-Specific Configuration**: Configure different settings for each RPC method
-- **Test Management**: Start, monitor, and retrieve test results
-- **Multiple Test Support**: Run and manage multiple tests simultaneously
+- **FastHTTP Performance**: High-performance HTTP server using FastHTTP
+- **CORS Support**: Cross-origin resource sharing enabled
 - **Comprehensive Results**: Detailed performance metrics and statistics
-- **Cleanup**: Automatic cleanup of temporary files
+- **Real-time Testing**: Synchronous test execution with immediate results
+- **Method Testing**: Supports all three RPC methods (getAccountInfo, getMultipleAccounts, getProgramAccounts)
 
 ## Quick Start
 
@@ -18,10 +17,9 @@ The RPC Test Server provides an HTTP API for running Solana RPC endpoint tests p
 
 ```bash
 # Start server on default port 8080
-./rpc_test server
+go run server.go
 
-# Start server on custom port and host
-./rpc_test server --port 9000 --host 0.0.0.0
+# The server will display startup information including available endpoints
 ```
 
 ### 2. Test the API
@@ -30,13 +28,16 @@ The RPC Test Server provides an HTTP API for running Solana RPC endpoint tests p
 # Check server status
 curl http://localhost:8080/
 
-# Start a test
+# Start a test with default configuration
+curl -X POST http://localhost:8080/test \
+  -H "Content-Type: application/json" \
+  -d '{}'
+
+# Start a test with specific programs
 curl -X POST http://localhost:8080/test \
   -H "Content-Type: application/json" \
   -d '{
-    "target_rpc_url": "https://api.mainnet-beta.solana.com",
-    "concurrency": 5,
-    "duration": 15
+    "programs": ["2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c"]
   }'
 ```
 
@@ -48,429 +49,186 @@ Server information and available endpoints.
 **Response:**
 ```json
 {
-  "service": "RPC Test Server",
-  "version": "1.0.0",
-  "endpoints": {
-    "POST /test": "Start a new test",
-    "GET /test/{id}": "Get test results",
-    "GET /tests": "List all tests",
-    "DELETE /test/{id}": "Delete a test"
+  "success": true,
+  "message": "RPC Test Server is running",
+  "data": {
+    "service": "RPC Test Server",
+    "version": "1.0.0",
+    "endpoints": {
+      "GET /": "Server information",
+      "POST /test": "Start a new test"
+    },
+    "available_methods": ["getAccountInfo", "getMultipleAccounts", "getProgramAccounts"]
   },
   "timestamp": "2024-01-01T12:00:00Z"
 }
 ```
 
 ### POST /test
-Start a new RPC test.
+Start a new RPC test. The test runs synchronously and returns results immediately.
 
 **Request Body:**
 ```json
 {
-  "remote_rpc_url": "https://us.rpc.fluxbeam.xyz",
-  "rpc_apikey": "YOUR_API_KEY_HERE",
-  "programs": ["2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c"],
-  "target_rpc_url": "https://api.mainnet-beta.solana.com",
-  "global_config": {
-    "concurrency": 5,
-    "duration": 15,
-    "limit": 0
-  },
-  "methods": {
-    "getAccountInfo": {
-      "concurrency": 10,
-      "duration": 20,
-      "limit": 50,
-      "enabled": true
-    },
-    "getMultipleAccounts": {
-      "concurrency": 5,
-      "duration": 15,
-      "limit": 100,
-      "enabled": true
-    },
-    "getProgramAccounts": {
-      "concurrency": 3,
-      "duration": 10,
-      "limit": 25,
-      "enabled": false
-    }
-  }
+  "programs": ["2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c"]
 }
 ```
 
-**Required Fields:**
-- `target_rpc_url`: The RPC endpoint to test
+**Note**: If no request body is provided or if the JSON parsing fails, the server will use default configuration with a default program.
 
-**Optional Fields:**
-- `remote_rpc_url`: RPC endpoint for seeding accounts (default: Fluxbeam)
-- `rpc_apikey`: API key for remote RPC (default: none)
-- `programs`: Array of program IDs to seed accounts from (default: Fluxbeam program)
-- `global_config`: Global configuration defaults for methods
-- `methods`: Method-specific configurations
-
-**Global Config Options:**
-- `concurrency`: Default number of concurrent requests (default: 5)
-- `duration`: Default test duration in seconds (default: 15)
-- `limit`: Default limit for number of accounts (default: 0 = no limit)
-
-**Method Config Options:**
-- `concurrency`: Number of concurrent requests for this method
-- `duration`: Test duration in seconds for this method
-- `limit`: Limit number of accounts for this method
-- `enabled`: Whether to run this method (default: true)
+**Default Configuration:**
+- **Remote RPC URL**: Uses default RPC URL from server configuration
+- **Target RPC URL**: Same as remote RPC URL
+- **Programs**: `["2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c"]` (default)
+- **Concurrency**: 50 (per method)
+- **Duration**: 15 seconds (per method)
+- **Limit**: 50 accounts
 
 **Response:**
-```json
-{
-  "success": true,
-  "message": "Test started successfully",
-  "test_id": "test_1704067200000000000",
-  "timestamp": "2024-01-01T12:00:00Z"
-}
-```
-
-### GET /test/{id}
-Get test results or status.
-
-**Response (Running Test):**
-```json
-{
-  "id": "test_1704067200000000000",
-  "status": "running",
-  "start_time": "2024-01-01T12:00:00Z",
-  "config": {
-    "target_rpc_url": "https://api.mainnet-beta.solana.com",
-    "concurrency": 5,
-    "duration": 15
-  }
-}
-```
-
-**Response (Completed Test):**
 ```json
 {
   "success": true,
   "message": "Test completed successfully",
-  "test_id": "test_1704067200000000000",
   "results": [
     {
       "method_name": "getAccountInfo",
-      "duration": "15.2s",
-      "total_requests": 150,
-      "success_count": 148,
-      "failure_count": 2,
-      "requests_per_sec": 9.87,
-      "success_rate": 98.67,
-      "min_latency": "45ms",
-      "max_latency": "1.2s",
-      "avg_latency": "120ms"
-    }
-  ],
-  "overall": {
-    "total_duration": "15.2s",
-    "total_requests": 450,
-    "total_success": 445,
-    "total_failure": 5,
-    "overall_rps": 29.61,
-    "overall_success_rate": 98.89
-  },
-  "timestamp": "2024-01-01T12:00:15Z",
-  "duration": "15.2s"
-}
-```
-
-### GET /tests
-List all tests.
-
-**Response:**
-```json
-{
-  "tests": [
+      "duration": 15.0,
+      "total_requests": 750,
+      "success_count": 745,
+      "failure_count": 5,
+      "success_rate": 99.33,
+      "requests_per_sec": 49.67,
+      "min_latency": 45.23,
+      "max_latency": 125.67,
+      "avg_latency": 78.45
+    },
     {
-      "id": "test_1704067200000000000",
-      "status": "completed",
-      "start_time": "2024-01-01T12:00:00Z",
-      "end_time": "2024-01-01T12:00:15Z",
-      "config": {
-        "target_rpc_url": "https://api.mainnet-beta.solana.com",
-        "concurrency": 5,
-        "duration": 15
-      },
-      "duration": "15.2s"
+      "method_name": "getMultipleAccounts",
+      "duration": 15.0,
+      "total_requests": 720,
+      "success_count": 718,
+      "failure_count": 2,
+      "success_rate": 99.72,
+      "requests_per_sec": 47.87,
+      "min_latency": 52.11,
+      "max_latency": 156.23,
+      "avg_latency": 89.76
+    },
+    {
+      "method_name": "getProgramAccounts", 
+      "duration": 15.0,
+      "total_requests": 680,
+      "success_count": 675,
+      "failure_count": 5,
+      "success_rate": 99.26,
+      "requests_per_sec": 45.33,
+      "min_latency": 125.45,
+      "max_latency": 456.78,
+      "avg_latency": 234.56
     }
   ],
-  "count": 1,
-  "timestamp": "2024-01-01T12:00:20Z"
+  "timestamp": "2024-01-01T12:00:00Z",
+  "duration": 45000000000
 }
 ```
 
-### DELETE /test/{id}
-Delete a test.
+## Server Configuration
 
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Test deleted successfully",
-  "test_id": "test_1704067200000000000",
-  "timestamp": "2024-01-01T12:00:25Z"
-}
+The server uses the following default configuration:
+
+```go
+// Default server settings
+serverHost = "localhost"
+serverPort = "8080"
+rpcURL = "https://api.mainnet-beta.solana.com"
+concurrency = 50
+duration = 15
+limit = 50
 ```
 
-## Configuration Examples
+## Architecture
 
-### Simple Configuration (Global Defaults)
-```json
-{
-  "target_rpc_url": "https://api.mainnet-beta.solana.com",
-  "global_config": {
-    "concurrency": 5,
-    "duration": 15
-  }
-}
-```
+### Core Components
 
-### Method-Specific Configuration
-```json
-{
-  "target_rpc_url": "https://api.mainnet-beta.solana.com",
-  "global_config": {
-    "concurrency": 3,
-    "duration": 10
-  },
-  "methods": {
-    "getAccountInfo": {
-      "concurrency": 10,
-      "duration": 20,
-      "enabled": true
-    },
-    "getMultipleAccounts": {
-      "concurrency": 5,
-      "duration": 15,
-      "enabled": true
-    },
-    "getProgramAccounts": {
-      "enabled": false
-    }
-  }
-}
-```
+1. **FastHTTP Server**: High-performance HTTP server
+2. **CORS Middleware**: Enables cross-origin requests
+3. **Test Manager**: Manages test execution
+4. **Method Execution**: Runs all three RPC methods concurrently
+5. **JSON Responses**: All responses use JSON format with Sonic for performance
 
-### Advanced Configuration with Limits
-```json
-{
-  "remote_rpc_url": "https://us.rpc.fluxbeam.xyz",
-  "rpc_apikey": "YOUR_API_KEY_HERE",
-  "programs": ["2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c"],
-  "target_rpc_url": "https://api.mainnet-beta.solana.com",
-  "global_config": {
-    "concurrency": 5,
-    "duration": 15,
-    "limit": 100
-  },
-  "methods": {
-    "getAccountInfo": {
-      "concurrency": 15,
-      "duration": 30,
-      "limit": 200,
-      "enabled": true
-    },
-    "getMultipleAccounts": {
-      "concurrency": 8,
-      "duration": 20,
-      "limit": 150,
-      "enabled": true
-    },
-    "getProgramAccounts": {
-      "concurrency": 3,
-      "duration": 10,
-      "limit": 50,
-      "enabled": true
-    }
-  }
-}
-```
+### Test Execution Flow
 
-## Client Examples
+1. **Request Processing**: Parse incoming JSON request or use defaults
+2. **Configuration Setup**: Set up method configurations for all three RPC methods
+3. **Account Seeding**: Fetch program accounts from the specified programs
+4. **Concurrent Testing**: Run all three methods simultaneously
+5. **Results Aggregation**: Collect and format test results
+6. **Response**: Return comprehensive test results
 
-### Python Client
+### Methods Tested
 
-See `examples/client_example.py` for a complete Python client implementation.
+The server automatically tests all three RPC methods:
 
-```python
-import requests
-
-# Start a test
-response = requests.post('http://localhost:8080/test', json={
-    'target_rpc_url': 'https://api.mainnet-beta.solana.com',
-    'concurrency': 5,
-    'duration': 15
-})
-
-test_id = response.json()['test_id']
-
-# Get results
-results = requests.get(f'http://localhost:8080/test/{test_id}').json()
-```
-
-### cURL Examples
-
-See `examples/curl_examples.sh` for complete cURL examples.
-
-```bash
-# Start test
-curl -X POST http://localhost:8080/test \
-  -H "Content-Type: application/json" \
-  -d '{"target_rpc_url": "https://api.mainnet-beta.solana.com"}'
-
-# Get results
-curl http://localhost:8080/test/test_1704067200000000000
-```
-
-## Integration Examples
-
-### CI/CD Pipeline
-
-```yaml
-# GitHub Actions example
-- name: Test RPC Endpoint
-  run: |
-    # Start test
-    response=$(curl -s -X POST http://localhost:8080/test \
-      -H "Content-Type: application/json" \
-      -d '{"target_rpc_url": "${{ secrets.RPC_URL }}"}')
-    
-    test_id=$(echo $response | jq -r '.test_id')
-    
-    # Wait for completion
-    while true; do
-      status=$(curl -s http://localhost:8080/test/$test_id | jq -r '.status')
-      if [ "$status" = "completed" ]; then
-        break
-      elif [ "$status" = "failed" ]; then
-        exit 1
-      fi
-      sleep 5
-    done
-    
-    # Check results
-    results=$(curl -s http://localhost:8080/test/$test_id)
-    success_rate=$(echo $results | jq -r '.overall.overall_success_rate')
-    
-    if (( $(echo "$success_rate < 95" | bc -l) )); then
-      echo "Success rate too low: $success_rate%"
-      exit 1
-    fi
-```
-
-### Monitoring Dashboard
-
-```javascript
-// JavaScript example for monitoring dashboard
-async function runRPCTest() {
-    // Start test
-    const startResponse = await fetch('/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            target_rpc_url: 'https://api.mainnet-beta.solana.com',
-            concurrency: 10,
-            duration: 30
-        })
-    });
-    
-    const { test_id } = await startResponse.json();
-    
-    // Poll for results
-    const pollInterval = setInterval(async () => {
-        const response = await fetch(`/test/${test_id}`);
-        const result = await response.json();
-        
-        if (result.status === 'completed') {
-            clearInterval(pollInterval);
-            updateDashboard(result);
-        }
-    }, 5000);
-}
-```
+1. **getAccountInfo**: Tests account information retrieval
+2. **getMultipleAccounts**: Tests batch account retrieval (5-15 accounts per request)
+3. **getProgramAccounts**: Tests program account enumeration
 
 ## Error Handling
 
-The API returns appropriate HTTP status codes:
-
-- `200`: Success
-- `400`: Bad Request (invalid JSON or missing required fields)
-- `404`: Test not found
-- `405`: Method not allowed
-- `500`: Internal server error
-
-Error responses include a message explaining the issue:
+### Common Error Responses
 
 ```json
 {
-  "error": "target_rpc_url is required"
+  "success": false,
+  "message": "Error description",
+  "timestamp": "2024-01-01T12:00:00Z"
 }
 ```
 
-## Configuration
+### Troubleshooting
 
-### Server Configuration
+1. **Server won't start**: Check if port 8080 is available
+2. **Connection refused**: Verify server is running with `go run server.go`
+3. **JSON parsing errors**: Ensure request body is valid JSON
+4. **Test failures**: Check RPC endpoint connectivity and program addresses
 
+## Usage Examples
+
+### Basic Health Check
 ```bash
-# Default configuration
-./rpc_test server
-
-# Custom configuration
-./rpc_test server --port 9000 --host 0.0.0.0
+curl http://localhost:8080/
 ```
 
-### Environment Variables
-
-You can also set environment variables:
-
+### Run Default Test
 ```bash
-export RPC_TEST_SERVER_PORT=9000
-export RPC_TEST_SERVER_HOST=0.0.0.0
-./rpc_test server
+curl -X POST http://localhost:8080/test
 ```
 
-## Security Considerations
-
-1. **API Keys**: Store API keys securely and don't expose them in client-side code
-2. **Network Access**: Consider firewall rules to restrict server access
-3. **Rate Limiting**: Implement rate limiting for production use
-4. **Authentication**: Add authentication for production deployments
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Server won't start**: Check if port is already in use
-2. **Tests fail**: Verify RPC endpoints are accessible
-3. **Memory issues**: Monitor server memory usage with many concurrent tests
-4. **Network timeouts**: Adjust timeout settings for slow RPC endpoints
-
-### Debug Mode
-
-Enable debug logging by setting the log level:
-
+### Custom Program Test
 ```bash
-export RPC_TEST_LOG_LEVEL=debug
-./rpc_test server
+curl -X POST http://localhost:8080/test \
+  -H "Content-Type: application/json" \
+  -d '{
+    "programs": [
+      "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c"
+    ]
+  }'
 ```
 
-## Performance
+### Integration with Lantern Configurator
 
-- **Concurrent Tests**: Server can handle multiple tests simultaneously
-- **Memory Usage**: Each test uses temporary files that are cleaned up automatically
-- **Network**: Tests use the same network configuration as CLI commands
-- **Scaling**: For high load, consider running multiple server instances behind a load balancer
+This server is designed to work with the [Lantern configuration tool](https://configurator.fluxrpc.com/):
 
-## Contributing
+1. Start the server: `go run server.go`
+2. Access the configurator at https://configurator.fluxrpc.com/
+3. The configurator will automatically connect to your local server
+4. Run tests directly from the web interface
 
-To extend the server functionality:
+## Performance Notes
 
-1. Add new endpoints in `cmd/server.go`
-2. Update the test execution logic in `runTestAsync()`
-3. Add new configuration options as needed
-4. Update documentation and examples 
+- Uses FastHTTP for high-performance HTTP handling
+- Supports concurrent testing of multiple RPC methods
+- Optimized JSON marshaling with Sonic
+- Real-time progress tracking during test execution
+- Automatic cleanup of temporary test files 

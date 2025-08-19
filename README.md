@@ -5,7 +5,7 @@ A comprehensive CLI tool for stress testing and benchmarking Solana RPC endpoint
 ## 🚀 Features
 - **Comprehensive Test Suite**: Run all RPC methods simultaneously with the `runall` command
 - **Dynamic Configuration**: Generate and load test configurations with API keys
-- **Smart Progress Tracking**: Real-time progress bars and detailed statistics
+- **Smart Progress Tracking**: Real-time progress bars and detailed statistics with dynamic updates
 - **Dynamic Latency Display**: Automatic unit selection (μs, ms, s) based on performance
 - **Test different Solana RPC methods** (getAccountInfo, getProgramAccounts, getMultipleAccounts)
 - **Configure concurrency level** for parallel requests
@@ -14,6 +14,8 @@ A comprehensive CLI tool for stress testing and benchmarking Solana RPC endpoint
 - **Seed account addresses** from programs for testing purposes
 - **Comprehensive performance metrics** (requests/second, latency statistics)
 - **Limit the number of accounts/programs** to process
+- **Real-time progress tracking** with visual progress bars during testing
+- **Dual RPC architecture** for seeding vs testing separation
 
 ## 📋 Table of Contents
 
@@ -89,9 +91,10 @@ The `runall` command provides a complete testing workflow:
 
 **What `runall` does:**
 1. **Generates test configuration** with your API key
-2. **Seeds 100 accounts** from the specified program using remote RPC and gPA
-3. **Runs all RPC methods** concurrently against your target RPC, using seeded accounts as needed
-4. **Provides comprehensive statistics** with dynamic latency display
+2. **Creates data directory** (./data/) for storing test files
+3. **Seeds 100 accounts** from the specified program using remote RPC and gPA
+4. **Runs all RPC methods** concurrently against your target RPC, using seeded accounts as needed
+5. **Provides comprehensive statistics** with dynamic latency display and real-time progress tracking
 
 ## 📁 Project Structure
 
@@ -180,8 +183,8 @@ The `runall` command uses a uses two RPCs. This lets you get program accounts fr
 # Basic usage for getMultipleAccounts
 ./rpc_test getMultipleAccounts --account <ACCOUNT_ADDRESS> --concurrency 10 --duration 30
 
-# Using comma-separated accounts for getMultipleAccounts
-./rpc_test getMultipleAccounts --account "addr1,addr2,addr3" --concurrency 10 --duration 30
+# Using multiple accounts for getMultipleAccounts (will batch 5-15 accounts randomly)
+./rpc_test getMultipleAccounts --account addr1 --account addr2 --account addr3 --concurrency 10 --duration 30
 
 # Basic usage for getProgramAccounts
 ./rpc_test getProgramAccounts --program <PROGRAM_ADDRESS> --concurrency 50 --duration 60
@@ -195,9 +198,6 @@ The `runall` command uses a uses two RPCs. This lets you get program accounts fr
 # Seed account data with a limit of 1000 accounts
 ./rpc_test seed --program <PROGRAM_ADDRESS> --output accounts.txt --limit 1000
 
-# Test against a local RPC endpoint
-./rpc_test localRpc getAccountInfo --account <ACCOUNT_ADDRESS> --concurrency 5
-
 # Test with limited number of accounts
 ./rpc_test getAccountInfo --account-file accounts.txt --limit 100 --concurrency 10
 ```
@@ -209,25 +209,28 @@ The `runall` command uses a uses two RPCs. This lets you get program accounts fr
 - `getMultipleAccounts`: Run tests against the getMultipleAccounts RPC method
 - `getProgramAccounts`: Run tests against the getProgramAccounts RPC method
 - `seed`: Fetch program accounts and save their addresses to a file for testing purposes
-- `localRpc`: Run tests against a local RPC endpoint (e.g. lantern) running on localhost:8080 
 
 ### Global Flags (applicable to all commands)
 
-- `-u, --url`: RPC endpoint URL (default: "http://localhost:8080" e.g. for Lantern)
+- `-u, --url`: RPC endpoint URL (default: "https://api.mainnet-beta.solana.com")
 - `-c, --concurrency`: Number of concurrent requests (default: 1)
 - `-d, --duration`: Test duration in seconds (default: 10)
+- `-a, --account`: Account addresses to use in tests (can be specified multiple times)
+- `-f, --account-file`: File containing account addresses (one per line)
 - `-l, --limit`: Limit the number of accounts/programs to process (0 for no limit)
+- `-k, --api-key`: API key for RPC endpoint (available globally, saved in config by runall)
 
 ### Command-specific Flags
 
 #### runall
 
-- `-k, --api-key`: API key for RPC endpoint (will be saved in config)
+- `-k, --api-key`: API key for RPC endpoint (will be saved in config) **REQUIRED**
+- `-u, --url`: Target RPC endpoint URL for testing **REQUIRED**
 - `-c, --concurrency`: Number of concurrent requests per method (default: 5)
 - `-d, --duration`: Test duration in seconds per method (default: 15)
 - `-l, --limit`: Limit the number of accounts to use (0 for no limit)
 
-**Note**: The `--url` flag is **REQUIRED** for `runall` command as it specifies the target RPC for testing.
+**Note**: Both `--api-key` and `--url` flags are **REQUIRED** for `runall` command.
 
 #### getAccountInfo
 
@@ -239,17 +242,20 @@ The `runall` command uses a uses two RPCs. This lets you get program accounts fr
 - `-a, --account`: Accounts to use in tests (will rotate between specified accounts in blocks of 5-15, randomly selected)
 - `-f, --account-file`: File containing accounts (one per line, will rotate between them)
 
+**Note**: getMultipleAccounts automatically batches accounts (5-15 per request) from your provided account list.
+
 #### getProgramAccounts
 
 - `-p, --program`: Program accounts to use in tests (can specify more than one)
 - `-f, --program-file`: File containing program accounts (one per line)
+
+**Note**: For getProgramAccounts, the `-f` flag uses `--program-file` instead of `--account-file`.
 
 #### seed
 
 - `-p, --program`: Program accounts to fetch accounts from (can specify multiple programs)
 - `-f, --program-file`: File containing program accounts (one per line)
 - `-o, --output`: Output file to store program accounts for future tests (default: "accounts.txt")
-
 
 ## ⚙️ Configuration
 
@@ -303,6 +309,7 @@ whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc
 2. **API Key Storage**: API keys are securely stored in the config file
 3. **Template-based**: Uses `config-template.json` as a base template
 4. **Dynamic Loading**: Configuration is loaded at runtime
+5. **Data Directory**: Automatically creates `./data/` directory for storing test files and results
 
 ## 📊 API Reference
 
@@ -312,11 +319,13 @@ whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc
 - **Purpose**: Fetch account information for specific addresses
 - **Use Case**: Testing account data retrieval performance
 - **Parameters**: Account addresses (single or multiple)
+- **Rotation**: Cycles through provided accounts for load distribution
 
 #### getMultipleAccounts
 - **Purpose**: Fetch information for multiple accounts in a single request
 - **Use Case**: Testing batch account data retrieval
 - **Parameters**: Multiple account addresses
+- **Batching**: Automatically groups 5-15 accounts per request (randomized)
 
 #### getProgramAccounts
 - **Purpose**: Fetch all accounts owned by a specific program
@@ -338,6 +347,11 @@ The test suite reports comprehensive metrics:
 - **Min Latency**: Minimum request latency (auto-formatted: μs, ms, or s)
 - **Max Latency**: Maximum request latency (auto-formatted: μs, ms, or s)
 - **Avg Latency**: Average request latency (auto-formatted: μs, ms, or s)
+
+#### Real-time Progress Tracking
+- **Visual Progress Bars**: Real-time progress display with completion percentage
+- **Live Statistics**: Current RPS, request counts, and elapsed time
+- **Method-specific Progress**: Individual progress tracking for each RPC method in runall
 
 #### Comprehensive Test Results (runall command)
 - **Individual Method Results**: Detailed stats for each RPC method

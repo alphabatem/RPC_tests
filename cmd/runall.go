@@ -189,38 +189,69 @@ func (pm *ProgressManager) Stop() {
 // runallCmd represents the runall command
 var runallCmd = &cobra.Command{
 	Use:   "runall",
-	Short: "Run all methods with comprehensive testing",
+	Short: "Run comprehensive test suite with all RPC methods",
 	Long: `Execute a comprehensive test suite that includes:
-1. Seeding data from default account configuration
-2. Seeding 100 accounts from the specified program
-3. Running all available RPC methods
-4. Providing detailed statistics for each method and overall results
 
-Example:
-  rpc_test runall --concurrency 10 --duration 30`,
+1. Configuration Generation: Creates test configuration with your API key
+2. Data Directory Setup: Creates ./data/ directory for storing test files  
+3. Account Seeding: Seeds 100 accounts from specified program using remote RPC
+4. Method Testing: Runs all available RPC methods concurrently against target RPC
+5. Progress Tracking: Real-time progress bars with live statistics
+6. Comprehensive Results: Detailed performance metrics for each method and overall summary
+
+Features:
+• Dual RPC Architecture: Uses remote RPC (from config) for seeding, target RPC (--url) for testing
+• Real-time Progress: Visual progress bars with completion percentage and live RPS
+• Dynamic Latency: Automatic unit formatting (μs, ms, s) based on performance
+• Performance Insights: Method comparison with fastest/slowest analysis
+• Account Management: Automatic account rotation and batching optimization
+
+Required Flags:
+  --api-key: API key for remote RPC endpoint (saved to config for future use)
+  --url: Target RPC endpoint URL for testing and benchmarking
+
+Examples:
+  # Basic comprehensive test
+  rpc_test runall --api-key YOUR_API_KEY --url https://your-target-rpc.com
+  
+  # Advanced test with custom settings
+  rpc_test runall --api-key YOUR_API_KEY --url https://your-target-rpc.com --concurrency 10 --duration 30 --limit 200
+  
+  # Test against Lantern (common use case)
+  rpc_test runall --api-key YOUR_FLUX_API_KEY --url http://localhost:8080`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("🚀 Starting comprehensive RPC test suite...")
 		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
 		// Step 1: Generate and save test configuration
-		fmt.Println("📋 Step 1: Generating test configuration...")
-		showProgress("Generating config", 100)
-		configFile := "./config.json"
-		if err := generateTestConfig(configFile); err != nil {
-			log.Fatalf("Failed to generate test config: %v", err)
-		}
-		showProgressComplete("Config generated")
-		fmt.Printf("✅ Test configuration saved to: %s\n", configFile)
+		var config TestConfig
 
-		// Step 1.5: Load the generated config with API key
-		fmt.Println("\n📂 Step 1.5: Loading configuration with API key...")
-		showProgress("Loading config", 100)
-		config, err := loadTestConfig(configFile)
-		if err != nil {
-			log.Fatalf("Failed to load test config: %v", err)
+		//check if config.json exists
+		if _, err := os.Stat("./config.json"); err == nil {
+			fmt.Println("📋 Step 1: Loading existing test configuration...")
+			showProgress("Loading config", 100)
+			config, err = loadTestConfig("./config.json")
+			if err != nil {
+				log.Fatalf("Failed to load test config: %v", err)
+			}
+			showProgressComplete("Config loaded")
+			fmt.Printf("✅ Configuration loaded successfully\n")
+		} else {
+			fmt.Println("📋 Step 1: Generating test configuration...")
+			showProgress("Generating config", 100)
+			configFile := "./config.json"
+			if err := generateTestConfig(configFile); err != nil {
+				log.Fatalf("Failed to generate test config: %v", err)
+			}
+			showProgressComplete("Config generated")
+			fmt.Printf("✅ Test configuration saved to: %s\n", configFile)
+			config, err = loadTestConfig(configFile)
+			if err != nil {
+				log.Fatalf("Failed to load test config: %v", err)
+			}
+			showProgressComplete("Config loaded")
+			fmt.Printf("✅ Configuration loaded successfully\n")
 		}
-		showProgressComplete("Config loaded")
-		fmt.Printf("✅ Configuration loaded successfully\n")
 
 		// Step 2: Seed accounts from the program
 		fmt.Println("\n🌱 Step 2: Seeding accounts from program...")
@@ -347,15 +378,12 @@ func seedAccountsFromProgram(accountsFile string, config TestConfig) error {
 
 	// Use the config RPC URL for seeding (remote RPC)
 	seedRPCURL := config.RemoteRPCURL
-	if config.RPCAPIKey != "" && config.RPCAPIKey != "YOUR_API_KEY_HERE" {
-		seedRPCURL = fmt.Sprintf("%s?key=%s", config.RemoteRPCURL, config.RPCAPIKey)
-	}
 
 	fmt.Printf("  🔍 Using remote RPC for seeding: %s\n", config.RemoteRPCURL)
 	fmt.Printf("  🔍 Fetching accounts from program %s...\n", programID[:8]+"...")
 
 	// Create RPC client for seeding (using config RPC URL)
-	rpcTest := methods.NewRPCTest(seedRPCURL)
+	rpcTest := methods.NewRPCTest(seedRPCURL, config.RPCAPIKey)
 
 	// Seed program accounts with limit of 100
 	err := rpcTest.SeedProgramAccounts(programID, accountsFile, 100)
@@ -463,7 +491,7 @@ func runSingleMethod(methodName string, accounts []string, methodIndex, totalMet
 	fmt.Printf("  🔄 [%d/%d] Starting %s test...\n", methodIndex, totalMethods, methodName)
 
 	// Create RPC client with target RPC URL (from --url flag)
-	rpcTest := methods.NewRPCTest(rpcURL)
+	rpcTest := methods.NewRPCTest(rpcURL, apiKey)
 
 	startTime := time.Now()
 	endTime := startTime.Add(time.Duration(duration) * time.Second)
@@ -546,6 +574,7 @@ func runSingleMethod(methodName string, accounts []string, methodIndex, totalMet
 
 					mutex.Lock()
 					if err != nil {
+						fmt.Printf("  ❌ Error: %v\n", err)
 						failureCount++
 					} else {
 						successCount++

@@ -66,7 +66,7 @@ func RunMethodTest(methodName string) {
 	}
 
 	// Create RPC client
-	rpcTest := methods.NewRPCTest(rpcURL)
+	rpcTest := methods.NewRPCTest(rpcURL, apiKey)
 
 	// Run the stress test
 	fmt.Printf("Starting %s test with %d concurrent requests for %d seconds\n",

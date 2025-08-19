@@ -19,18 +19,38 @@ var (
 // seedCmd represents the seed command
 var seedCmd = &cobra.Command{
 	Use:   "seed",
-	Short: "Seed account addresses from a program",
+	Short: "Seed account addresses from programs for testing purposes",
 	Long: `Fetch program accounts and save their addresses to a file for testing purposes.
 
-Example:
+This command fetches all accounts owned by specified programs and saves their addresses 
+to a text file. This is essential for preparing test data before running performance tests 
+with getAccountInfo or getMultipleAccounts methods.
+
+Features:
+• Bulk Account Fetching: Retrieves all accounts from specified programs efficiently
+• File Output: Saves account addresses in a clean text format (one per line)
+• Limit Support: Control the number of accounts to fetch with --limit flag
+• Directory Creation: Automatically creates output directories if they don't exist
+• Multiple Programs: Support for fetching from multiple programs simultaneously
+
+Use Cases:
+• Prepare account lists for performance testing
+• Generate test data for CI/CD pipelines
+• Create account datasets for load testing scenarios
+• Build custom account collections for specific testing needs
+
+Examples:
   # Seed accounts for a single program
   rpc_test seed --program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA --output accounts.txt
 
-  # Seed accounts for multiple programs
-  rpc_test seed --program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA --program 9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin
+  # Seed accounts with a limit (recommended for testing)
+  rpc_test seed --program 2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c --output accounts.txt --limit 1000
 
-  # Seed accounts from a file containing program IDs
-  rpc_test seed --program-file ./programs.txt --output accounts.txt`,
+  # Seed from multiple programs 
+  rpc_test seed --program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA --program 2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c --output ./data/accounts.txt
+
+  # Seed from programs listed in a file
+  rpc_test seed --program-file ./programs.txt --output ./data/test_accounts.txt --limit 500`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Load programs from file if provided
 		if programsFile != "" {
@@ -75,7 +95,7 @@ Example:
 // seedProgramAccounts fetches and saves program accounts
 func seedProgramAccounts(programAddress string, outputFile string) error {
 	// Create RPC client
-	rpcTest := methods.NewRPCTest(rpcURL)
+	rpcTest := methods.NewRPCTest(rpcURL, apiKey)
 
 	// Seed program accounts
 	return rpcTest.SeedProgramAccounts(programAddress, outputFile, limit)

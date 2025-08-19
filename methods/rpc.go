@@ -1,6 +1,8 @@
 package methods
 
 import (
+	"fmt"
+
 	"github.com/gagliardetto/solana-go/rpc"
 )
 
@@ -9,6 +11,7 @@ type RPCTest struct {
 	rpcUrl string
 }
 
-func NewRPCTest(rpcUrl string) *RPCTest {
-	return &RPCTest{rpc: rpc.New(rpcUrl), rpcUrl: rpcUrl}
+func NewRPCTest(rpcUrl string, apiKey string) *RPCTest {
+	url := fmt.Sprintf("%s?key=%s", rpcUrl, apiKey)
+	return &RPCTest{rpc: rpc.New(url), rpcUrl: url}
 }

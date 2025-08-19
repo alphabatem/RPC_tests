@@ -19,15 +19,28 @@ var getProgramAccountsCmd = &cobra.Command{
 	Short: "Run performance tests for getProgramAccounts RPC method",
 	Long: `Run stress tests against Solana RPC endpoints using the getProgramAccounts method.
 
-Example:
+This method tests program account enumeration performance, which is typically one of the most 
+resource-intensive RPC operations. It fetches all accounts owned by specified programs, making 
+it ideal for testing RPC endpoint capabilities under heavy load.
+
+Features:
+• Program Rotation: Cycles through provided programs for load distribution
+• Real-time Progress: Visual progress bars with completion percentage and live statistics
+• Comprehensive Metrics: Success rate, RPS, and latency statistics with dynamic unit formatting
+• Flexible Input: Support for individual programs or program files
+• Resource Intensive: Tests the most demanding RPC operation for comprehensive benchmarking
+
+Note: Use --program flag (not --account) and --program-file (not --account-file) for this command.
+
+Examples:
   # Test with a single program
   rpc_test getProgramAccounts --program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA --concurrency 5 --duration 30
 
-  # Test with multiple programs
-  rpc_test getProgramAccounts --program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA --program 9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin --concurrency 10
+  # Test with multiple programs (will rotate between them)
+  rpc_test getProgramAccounts --program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA --program 2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c --concurrency 10 --duration 45
 
-  # Test with programs from a file
-  rpc_test getProgramAccounts --program-file ./programs.txt --url https://api.mainnet-beta.solana.com --concurrency 20 --duration 60`,
+  # Test with programs from a file (recommended for multiple programs)
+  rpc_test getProgramAccounts --program-file ./programs.txt --concurrency 20 --duration 60 --limit 10`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Load programs from file if provided
 		if programsFile != "" {
